@@ -195,16 +195,16 @@ export default function WarRoom() {
 
   const postMsg = useCallback((ch, sender, color, text, isAgent = false) => {
     if (!roomId) return;
-    // Truncate messages to 10K chars max to avoid Firebase "Write too large" errors
-    const MAX_MSG = 10000;
-    const truncText = text.length > MAX_MSG ? text.slice(0, MAX_MSG) + "\n\n[... Response truncated for storage. Full output available in session ...]" : text;
-    push(ref(db, `rooms/${roomId}/messages`), { id: uid(), channel: ch, sender, senderColor: color, text: truncText, time: ts(), isAgent, isHuman: !isAgent, timestamp: Date.now(), sessionId });
+    // Truncate messages to 6K chars max to avoid Firebase "Write too large" errors
+    const MAX_MSG = 6000;
+    const truncText = text.length > MAX_MSG ? text.slice(0, MAX_MSG) + "\n\n[... Full output in staff channel ...]" : text;
+    push(ref(db, `rooms/${roomId}/messages`), { id: uid(), channel: ch, sender, senderColor: color, text: truncText, time: ts(), isAgent, isHuman: !isAgent, timestamp: Date.now(), sessionId }).catch((err) => console.warn("Firebase write warning:", err.message?.slice(0, 100)));
   }, [roomId, sessionId]);
 
   const syncMdmpState = useCallback((u) => {
     if (!roomId) return;
     // Only sync metadata to Firebase — stepOutputs stay in local state to avoid "Write too large"
-    set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps] });
+    set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps] }).catch((err) => console.warn("Firebase state sync warning:", err.message?.slice(0, 100)));
   }, [roomId, currentStep, isRunning, completedSteps]);
 
   const handleUpload = useCallback(async (e, type) => {
@@ -237,8 +237,10 @@ export default function WarRoom() {
   }, [docFiles, docTexts, scenarioFiles, scenarioTexts, roomId, callsign, library]);
 
   const getDocContext = useCallback(() => {
+    // Scenario files are ALREADY hardcoded in SCENARIO_PACKAGE — skip them to avoid doubling prompt size
+    // Only include user-uploaded doctrine references (if any)
     let c = "";
-    if (Object.keys(scenarioTexts).length > 0) { c += "══ SCENARIO DOCUMENTS ══\n\n"; Object.entries(scenarioTexts).forEach(([n, t]) => { c += `── ${n} ──\n${t}\n\n`; }); }
+    if (Object.keys(scenarioTexts).length > 0) { c += `[${Object.keys(scenarioTexts).length} scenario documents loaded — content provided via SCENARIO_PACKAGE in prompt]\n\n`; }
     if (Object.keys(docTexts).length > 0) { c += "══ DOCTRINE REFERENCES ══\n\n"; Object.entries(docTexts).forEach(([n, t]) => { c += `── ${n} ──\n${t}\n\n`; }); }
     return c;
   }, [docTexts, scenarioTexts]);
