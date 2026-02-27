@@ -195,12 +195,25 @@ export default function WarRoom() {
 
   const postMsg = useCallback((ch, sender, color, text, isAgent = false) => {
     if (!roomId) return;
-    push(ref(db, `rooms/${roomId}/messages`), { id: uid(), channel: ch, sender, senderColor: color, text, time: ts(), isAgent, isHuman: !isAgent, timestamp: Date.now(), sessionId });
+    // Truncate messages to 30K chars max to avoid Firebase "Write too large" errors
+    const MAX_MSG = 30000;
+    const truncText = text.length > MAX_MSG ? text.slice(0, MAX_MSG) + "\n\n[... Response truncated for storage. Full output available in session ...]" : text;
+    push(ref(db, `rooms/${roomId}/messages`), { id: uid(), channel: ch, sender, senderColor: color, text: truncText, time: ts(), isAgent, isHuman: !isAgent, timestamp: Date.now(), sessionId });
   }, [roomId, sessionId]);
 
   const syncMdmpState = useCallback((u) => {
     if (!roomId) return;
-    set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps], stepOutputs: u.stepOutputs ?? stepOutputs });
+    // Truncate stepOutputs to avoid Firebase "Write too large" — store summaries, not full text
+    const MAX_OUTPUT = 15000;
+    const rawOutputs = u.stepOutputs ?? stepOutputs;
+    const truncOutputs = {};
+    for (const [stepId, outs] of Object.entries(rawOutputs)) {
+      truncOutputs[stepId] = {};
+      for (const [roleId, txt] of Object.entries(outs)) {
+        truncOutputs[stepId][roleId] = typeof txt === "string" && txt.length > MAX_OUTPUT ? txt.slice(0, MAX_OUTPUT) + "\n\n[... Truncated for sync ...]" : txt;
+      }
+    }
+    set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps], stepOutputs: truncOutputs });
   }, [roomId, currentStep, isRunning, completedSteps, stepOutputs]);
 
   const handleUpload = useCallback(async (e, type) => {
@@ -227,7 +240,8 @@ export default function WarRoom() {
     if (errors.length > 0) msg += `Errors:\n${errors.join("\n")}`;
     if (msg) alert(msg.trim());
     setDocFiles(nDF); setDocTexts(nDT); setScenarioFiles(nSF); setScenarioTexts(nST);
-    if (roomId) set(ref(db, `rooms/${roomId}/documents`), { docFiles: nDF, docTexts: nDT, scenarioFiles: nSF, scenarioTexts: nST });
+    // Only sync file names to Firebase (not full text) to avoid "Write too large"
+    if (roomId) set(ref(db, `rooms/${roomId}/documents`), { docFiles: nDF, scenarioFiles: nSF });
     e.target.value = "";
   }, [docFiles, docTexts, scenarioFiles, scenarioTexts, roomId, callsign, library]);
 
