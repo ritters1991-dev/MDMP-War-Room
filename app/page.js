@@ -29,14 +29,23 @@ const readFileAsText = (file) => new Promise((res, rej) => {
   r.readAsText(file);
 });
 
-async function callAgent(roleId, userPrompt, systemOverride) {
+async function callAgent(roleId, userPrompt, systemOverride, retries = 2) {
   const role = STAFF[roleId];
   const sysPrompt = systemOverride || (role ? buildSystemPrompt(role) : "You are a military staff coordinator.");
-  try {
-    const res = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt }) });
-    const data = await res.json();
-    return data.error ? `⚠ ERROR: ${data.error}` : data.text;
-  } catch (err) { return `⚠ ERROR: ${err.message}`; }
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ systemPrompt: sysPrompt, userPrompt }) });
+      const data = await res.json();
+      if (data.error && data.error.includes("Rate limited") && attempt < retries) {
+        await new Promise(r => setTimeout(r, 3000 * (attempt + 1))); // Back off: 3s, 6s
+        continue;
+      }
+      return data.error ? `⚠ ERROR: ${data.error}` : data.text;
+    } catch (err) {
+      if (attempt < retries) { await new Promise(r => setTimeout(r, 3000 * (attempt + 1))); continue; }
+      return `⚠ ERROR: ${err.message}`;
+    }
+  }
 }
 
 function Spinner() {
@@ -258,13 +267,18 @@ export default function WarRoom() {
     postMsg("cop", "SYSTEM", "#D4A843", `═══════════════════════════════════════\n  25 ID STAFF: STEP ${step.num} — ${step.title.toUpperCase()}\n═══════════════════════════════════════\n\nLead: ${step.lead.map((l) => STAFF[l]?.short).join(", ")}\nSupporting: ${step.support.map((s) => STAFF[s]?.short).join(", ")}\nOutputs: ${step.outputs.join(", ")}\n\nAll sections working...`, true);
     const allAgents = [...step.lead, ...step.support], results = {};
     for (const a of allAgents) postMsg(a, STAFF[a].title, STAFF[a].color, `Roger. Working Step ${step.num}...`, true);
-    await Promise.all(allAgents.map(async (a) => {
-      const agent = STAFF[a];
-      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step.`);
-      results[a] = result;
-      postMsg(a, agent.title, agent.color, result, true);
-      postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 600 ? result.slice(0, 600) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
-    }));
+    // Run agents in batches of 2 to avoid Anthropic API rate limits
+    for (let i = 0; i < allAgents.length; i += 2) {
+      const batch = allAgents.slice(i, i + 2);
+      await Promise.all(batch.map(async (a) => {
+        const agent = STAFF[a];
+        const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step.`);
+        results[a] = result;
+        postMsg(a, agent.title, agent.color, result, true);
+        postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 600 ? result.slice(0, 600) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
+      }));
+      if (i + 2 < allAgents.length) await new Promise(r => setTimeout(r, 1500)); // 1.5s gap between batches
+    }
     const xo = await callAgent("xo", `XO: Step ${step.num} complete. Staff outputs:\n\n${Object.entries(results).map(([i, t]) => `── ${STAFF[i]?.title} ──\n${t}`).join("\n\n")}\n\nProvide: 1) BLUF 2) Sync issues 3) Info gaps 4) Risk assessment (ATP 5-19) 5) Recommendation. Also identify any doctrine gaps the staff flagged.`);
     postMsg("cop", "25 ID XO", "#D4A843", `══ STEP ${step.num} SYNTHESIS ══\n\n${xo}`, true);
     postMsg("cop", "SYSTEM", "#D4A843", `✓ Step ${step.num} COMPLETE\n${step.outputs.map((o) => `  ✓ ${o}`).join("\n")}\n\nReview outputs, interact with any section, or proceed.`, true);
