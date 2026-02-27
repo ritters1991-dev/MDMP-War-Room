@@ -189,32 +189,23 @@ export default function WarRoom() {
     onValue(ref(db, `rooms/${id}/participants`), (s) => { const v = s.val(); if (v) setParticipants(Object.entries(v).filter(([_, p]) => Date.now() - p.lastSeen < 60000).map(([sid, p]) => ({ ...p, sessionId: sid }))); });
     onValue(ref(db, `rooms/${id}/messages`), (s) => { const v = s.val(); if (!v) return; const g = {}; Object.values(v).forEach((m) => { if (!g[m.channel]) g[m.channel] = []; g[m.channel].push(m); }); Object.keys(g).forEach((c) => g[c].sort((a, b) => a.timestamp - b.timestamp)); setMessages(g); });
     onValue(ref(db, `rooms/${id}/mdmpState`), (s) => { const v = s.val(); if (v) { if (v.currentStep !== undefined) setCurrentStep(v.currentStep); if (v.isRunning !== undefined) setIsRunning(v.isRunning); if (v.completedSteps) setCompletedSteps(new Set(v.completedSteps)); if (v.stepOutputs) setStepOutputs(v.stepOutputs); } });
-    onValue(ref(db, `rooms/${id}/documents`), (s) => { const v = s.val(); if (v) { if (v.docFiles) setDocFiles(v.docFiles); if (v.docTexts) setDocTexts(v.docTexts); if (v.scenarioFiles) setScenarioFiles(v.scenarioFiles); if (v.scenarioTexts) setScenarioTexts(v.scenarioTexts); } });
+    onValue(ref(db, `rooms/${id}/documents`), (s) => { const v = s.val(); if (v) { if (v.docFiles) setDocFiles(v.docFiles); if (v.scenarioFiles) setScenarioFiles(v.scenarioFiles); } });
     return () => clearInterval(hb);
   }, [callsign, sessionId]);
 
   const postMsg = useCallback((ch, sender, color, text, isAgent = false) => {
     if (!roomId) return;
-    // Truncate messages to 30K chars max to avoid Firebase "Write too large" errors
-    const MAX_MSG = 30000;
+    // Truncate messages to 10K chars max to avoid Firebase "Write too large" errors
+    const MAX_MSG = 10000;
     const truncText = text.length > MAX_MSG ? text.slice(0, MAX_MSG) + "\n\n[... Response truncated for storage. Full output available in session ...]" : text;
     push(ref(db, `rooms/${roomId}/messages`), { id: uid(), channel: ch, sender, senderColor: color, text: truncText, time: ts(), isAgent, isHuman: !isAgent, timestamp: Date.now(), sessionId });
   }, [roomId, sessionId]);
 
   const syncMdmpState = useCallback((u) => {
     if (!roomId) return;
-    // Truncate stepOutputs to avoid Firebase "Write too large" — store summaries, not full text
-    const MAX_OUTPUT = 15000;
-    const rawOutputs = u.stepOutputs ?? stepOutputs;
-    const truncOutputs = {};
-    for (const [stepId, outs] of Object.entries(rawOutputs)) {
-      truncOutputs[stepId] = {};
-      for (const [roleId, txt] of Object.entries(outs)) {
-        truncOutputs[stepId][roleId] = typeof txt === "string" && txt.length > MAX_OUTPUT ? txt.slice(0, MAX_OUTPUT) + "\n\n[... Truncated for sync ...]" : txt;
-      }
-    }
-    set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps], stepOutputs: truncOutputs });
-  }, [roomId, currentStep, isRunning, completedSteps, stepOutputs]);
+    // Only sync metadata to Firebase — stepOutputs stay in local state to avoid "Write too large"
+    set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps] });
+  }, [roomId, currentStep, isRunning, completedSteps]);
 
   const handleUpload = useCallback(async (e, type) => {
     const files = Array.from(e.target.files);
@@ -394,9 +385,9 @@ export default function WarRoom() {
           try {
             const { dF, dT, sF, sT } = loadSelectedDocs();
             setPhase("warroom");
-            // Sync docs to room in background — don't block transition
+            // Sync only file NAMES to Firebase — texts stay in local state to avoid "Write too large"
             if (roomId) {
-              set(ref(db, `rooms/${roomId}/documents`), { docFiles: dF, docTexts: dT, scenarioFiles: sF, scenarioTexts: sT }).catch((err) => console.error("Doc sync error:", err));
+              set(ref(db, `rooms/${roomId}/documents`), { docFiles: dF, scenarioFiles: sF }).catch((err) => console.error("Doc sync error:", err));
             }
             // Post welcome message after a short delay to ensure roomId is live
             setTimeout(() => {
