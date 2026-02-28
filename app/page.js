@@ -38,9 +38,11 @@ async function callAgent(roleId, userPrompt, { systemOverride, model, maxTokens,
       if (model) body.model = model;
       if (maxTokens) body.maxTokens = maxTokens;
       const res = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const text = await res.text();
+      const rawText = await res.text();
+      // Streaming response: spaces (heartbeats) + JSON at the end. Trim to get just the JSON.
+      const trimmed = rawText.trim();
       let data;
-      try { data = JSON.parse(text); } catch { return `⚠ ERROR: Server returned non-JSON (possible timeout). Try again.`; }
+      try { data = JSON.parse(trimmed); } catch { return `⚠ ERROR: Server returned non-JSON (possible timeout). Try again.`; }
       if (data.error && data.error.includes("Rate limited") && attempt < retries) {
         await new Promise(r => setTimeout(r, 5000 * (attempt + 1))); // Back off: 5s, 10s
         continue;
