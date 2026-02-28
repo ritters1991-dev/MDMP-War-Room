@@ -14,7 +14,7 @@ function truncatePrompt(text, maxChars) {
 
 export async function POST(req) {
   try {
-    const { systemPrompt, userPrompt, model } = await req.json();
+    const { systemPrompt, userPrompt, model, maxTokens } = await req.json();
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
@@ -33,8 +33,8 @@ export async function POST(req) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: model || "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        model: model || "claude-3-5-haiku-20241022",
+        max_tokens: maxTokens || 1500,
         system: safeSystem,
         messages: [{ role: "user", content: safeUser }],
       }),
