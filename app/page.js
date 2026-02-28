@@ -38,7 +38,9 @@ async function callAgent(roleId, userPrompt, { systemOverride, model, maxTokens,
       if (model) body.model = model;
       if (maxTokens) body.maxTokens = maxTokens;
       const res = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { return `⚠ ERROR: Server returned non-JSON (possible timeout). Try again.`; }
       if (data.error && data.error.includes("Rate limited") && attempt < retries) {
         await new Promise(r => setTimeout(r, 5000 * (attempt + 1))); // Back off: 5s, 10s
         continue;
@@ -279,9 +281,10 @@ export default function WarRoom() {
       postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 600 ? result.slice(0, 600) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
       await new Promise(r => setTimeout(r, 2000)); // 2s gap between agents
     }
-    // XO synthesis uses Sonnet for deeper analysis
-    await new Promise(r => setTimeout(r, 3000)); // Extra gap before synthesis
-    const xo = await callAgent("xo", `XO: Step ${step.num} complete. Staff outputs:\n\n${Object.entries(results).map(([i, t]) => `── ${STAFF[i]?.title} ──\n${t}`).join("\n\n")}\n\nProvide: 1) BLUF 2) Sync issues 3) Info gaps 4) Risk assessment (ATP 5-19) 5) Recommendation.`, { model: "claude-sonnet-4-20250514", maxTokens: 2000 });
+    // XO synthesis — truncate each agent's output to keep prompt small (avoids Vercel 30s timeout)
+    await new Promise(r => setTimeout(r, 3000));
+    const xoInputs = Object.entries(results).map(([i, t]) => `── ${STAFF[i]?.title} ──\n${typeof t === "string" ? t.slice(0, 800) : t}`).join("\n\n");
+    const xo = await callAgent("xo", `XO: Step ${step.num} complete. Staff outputs (summaries):\n\n${xoInputs}\n\nProvide: 1) BLUF 2) Key sync issues 3) Top info gaps 4) Risk assessment 5) Recommendation. Be concise.`);
     postMsg("cop", "25 ID XO", "#D4A843", `══ STEP ${step.num} SYNTHESIS ══\n\n${xo}`, true);
     postMsg("cop", "SYSTEM", "#D4A843", `✓ Step ${step.num} COMPLETE\n${step.outputs.map((o) => `  ✓ ${o}`).join("\n")}\n\nReview outputs, interact with any section, or proceed.`, true);
     const nO = { ...stepOutputs, [step.id]: results }, nC = new Set([...completedSteps, si]);
