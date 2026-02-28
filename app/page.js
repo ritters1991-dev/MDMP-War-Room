@@ -95,6 +95,7 @@ export default function WarRoom() {
 
   const [messages, setMessages] = useState({});
   const [activeChannel, setActiveChannel] = useState("cop");
+  const [knowledgeBase, setKnowledgeBase] = useState({}); // { stepId: { agentId: { summary, agentTitle, ... } } }
   const [inputText, setInputText] = useState("");
 
   const [currentStep, setCurrentStep] = useState(-1);
@@ -111,6 +112,9 @@ export default function WarRoom() {
   const [scenarioOpen, setScenarioOpen] = useState(true);
   const [doctrineOpen, setDoctrineOpen] = useState(false);
   const [outputsOpen, setOutputsOpen] = useState(true);
+  const [kbOpen, setKbOpen] = useState(true); // Knowledge Base panel
+  const [kbExpandedSteps, setKbExpandedSteps] = useState(new Set()); // Which steps are expanded in KB
+  const [kbViewAgent, setKbViewAgent] = useState(null); // { stepId, agentId } — full output modal
 
   // Upload progress
   const [uploadProgress, setUploadProgress] = useState(null); // { current, total, fileName }
@@ -206,6 +210,8 @@ export default function WarRoom() {
     onValue(ref(db, `rooms/${id}/messages`), (s) => { const v = s.val(); if (!v) return; const g = {}; Object.values(v).forEach((m) => { if (!g[m.channel]) g[m.channel] = []; g[m.channel].push(m); }); Object.keys(g).forEach((c) => g[c].sort((a, b) => a.timestamp - b.timestamp)); setMessages(g); });
     onValue(ref(db, `rooms/${id}/mdmpState`), (s) => { const v = s.val(); if (v) { if (v.currentStep !== undefined) setCurrentStep(v.currentStep); if (v.isRunning !== undefined) setIsRunning(v.isRunning); if (v.completedSteps) setCompletedSteps(new Set(v.completedSteps)); if (v.stepOutputs) setStepOutputs(v.stepOutputs); } });
     onValue(ref(db, `rooms/${id}/documents`), (s) => { const v = s.val(); if (v) { if (v.docFiles) setDocFiles(v.docFiles); if (v.scenarioFiles) setScenarioFiles(v.scenarioFiles); } });
+    // Knowledge Base listener — syncs condensed outputs from all participants
+    onValue(ref(db, `rooms/${id}/knowledge`), (s) => { const v = s.val(); if (v) setKnowledgeBase(v); });
     return () => clearInterval(hb);
   }, [callsign, sessionId]);
 
@@ -222,6 +228,23 @@ export default function WarRoom() {
     // Only sync metadata to Firebase — stepOutputs stay in local state to avoid "Write too large"
     set(ref(db, `rooms/${roomId}/mdmpState`), { currentStep: u.currentStep ?? currentStep, isRunning: u.isRunning ?? isRunning, completedSteps: u.completedSteps ? [...u.completedSteps] : [...completedSteps] }).catch((err) => console.warn("Firebase state sync warning:", err.message?.slice(0, 100)));
   }, [roomId, currentStep, isRunning, completedSteps]);
+
+  // Knowledge Base — save each agent output individually to Firebase (small writes, ~1-2KB each)
+  const saveToKnowledgeBase = useCallback((stepId, stepNum, agentId, fullText) => {
+    if (!roomId || !fullText || fullText.startsWith("⚠")) return;
+    const agent = STAFF[agentId];
+    const KB_SUMMARY_LEN = 600; // chars for the condensed summary
+    const summary = fullText.length > KB_SUMMARY_LEN ? fullText.slice(0, KB_SUMMARY_LEN) + "..." : fullText;
+    set(ref(db, `rooms/${roomId}/knowledge/${stepId}/${agentId}`), {
+      agentTitle: agent?.title || agentId,
+      agentShort: agent?.short || agentId,
+      agentColor: agent?.color || "#7A8A9E",
+      agentIcon: agent?.icon || "?",
+      stepNum,
+      summary,
+      timestamp: Date.now(),
+    }).catch((err) => console.warn("KB write warning:", err.message?.slice(0, 100)));
+  }, [roomId]);
 
   const handleUpload = useCallback(async (e, type) => {
     const files = Array.from(e.target.files);
@@ -281,6 +304,7 @@ export default function WarRoom() {
       results[a] = result;
       postMsg(a, agent.title, agent.color, result, true);
       postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 400 ? result.slice(0, 400) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
+      saveToKnowledgeBase(step.id, step.num, a, result); // Persist to KB
       await new Promise(r => setTimeout(r, 2000)); // 2s gap between agents
     }
     // XO synthesis — 15s delay for rate limit recovery, aggressive truncation, graceful fallback
@@ -297,6 +321,7 @@ export default function WarRoom() {
     // Graceful fallback if XO fails (timeout, rate limit, etc.)
     if (xo && !xo.startsWith("⚠")) {
       postMsg("cop", "25 ID XO", "#D4A843", `══ STEP ${step.num} SYNTHESIS ══\n\n${xo}`, true);
+      saveToKnowledgeBase(step.id, step.num, "xo_synthesis", `STEP ${step.num} XO SYNTHESIS:\n${xo}`);
     } else {
       const completed = Object.entries(results).filter(([_, t]) => typeof t === "string" && !t.startsWith("⚠")).map(([id]) => STAFF[id]?.short || id);
       const failed = Object.entries(results).filter(([_, t]) => typeof t === "string" && t.startsWith("⚠")).map(([id]) => STAFF[id]?.short || id);
@@ -309,7 +334,7 @@ export default function WarRoom() {
     const nO = { ...stepOutputs, [step.id]: results }, nC = new Set([...completedSteps, si]);
     setStepOutputs(nO); setCompletedSteps(nC); setIsRunning(false);
     syncMdmpState({ isRunning: false, completedSteps: nC, stepOutputs: nO });
-  }, [getDocContext, getPrevOutputs, postMsg, syncMdmpState, stepOutputs, completedSteps]);
+  }, [getDocContext, getPrevOutputs, postMsg, syncMdmpState, saveToKnowledgeBase, stepOutputs, completedSteps]);
 
   const sendMessage = useCallback(async () => {
     const text = inputText.trim(); if (!text || isRunning) return; setInputText("");
@@ -550,20 +575,90 @@ export default function WarRoom() {
             <UploadProgress progress={uploadProgress} />
           </div>
 
-          {/* EXPORT & OUTPUTS - collapsible */}
-          {completedSteps.size > 0 && (
-            <div style={{ ...S.rps, borderTop: "1px solid #1E2A3A" }}>
-              <button onClick={() => setOutputsOpen(!outputsOpen)} style={S.collapseBtn}>
-                <span style={{ color: "#3EAF5C", fontSize: 10 }}>{outputsOpen ? "▼" : "▶"}</span>
-                <span style={S.rpt}>OUTPUTS ({completedSteps.size} steps)</span>
+          {/* KNOWLEDGE BASE — persistent record of all staff due outs */}
+          {(completedSteps.size > 0 || Object.keys(knowledgeBase).length > 0) && (
+            <div style={{ ...S.rps, borderTop: "1px solid #1E2A3A", flex: 1, overflowY: "auto" }}>
+              <button onClick={() => setKbOpen(!kbOpen)} style={S.collapseBtn}>
+                <span style={{ color: "#D4A843", fontSize: 10 }}>{kbOpen ? "▼" : "▶"}</span>
+                <span style={S.rpt}>KNOWLEDGE BASE ({Object.keys(knowledgeBase).length} steps)</span>
               </button>
-              {outputsOpen && MDMP_STEPS.filter((_, i) => completedSteps.has(i)).map((step) => (
-                <div key={step.id} style={{ marginBottom: 4 }}>
-                  <div style={{ fontSize: 10, color: "#D4A843", fontWeight: 600 }}>Step {step.num}</div>
-                  {step.outputs.map((o) => <div key={o} style={{ fontSize: 9, color: "#3EAF5C", paddingLeft: 8 }}>✓ {o}</div>)}
-                </div>
-              ))}
+              {kbOpen && (() => {
+                // Merge local stepOutputs with Firebase knowledgeBase
+                const allStepIds = new Set([...Object.keys(stepOutputs), ...Object.keys(knowledgeBase)]);
+                const sortedSteps = MDMP_STEPS.filter((s) => allStepIds.has(s.id));
+                return sortedSteps.map((step) => {
+                  const kbStep = knowledgeBase[step.id] || {};
+                  const localStep = stepOutputs[step.id] || {};
+                  const agentIds = new Set([...Object.keys(kbStep), ...Object.keys(localStep)]);
+                  const isExpanded = kbExpandedSteps.has(step.id);
+                  return (
+                    <div key={step.id} style={{ marginBottom: 6 }}>
+                      <button
+                        onClick={() => setKbExpandedSteps((prev) => { const n = new Set(prev); n.has(step.id) ? n.delete(step.id) : n.add(step.id); return n; })}
+                        style={{ ...S.collapseBtn, padding: "3px 0", background: isExpanded ? "#1A233222" : "transparent" }}
+                      >
+                        <span style={{ color: "#D4A843", fontSize: 9 }}>{isExpanded ? "▼" : "▶"}</span>
+                        <span style={{ fontSize: 10, color: "#D4A843", fontWeight: 600 }}>Step {step.num}: {step.title}</span>
+                        <span style={{ fontSize: 8, color: "#566A80", marginLeft: "auto" }}>{agentIds.size} entries</span>
+                      </button>
+                      {isExpanded && (
+                        <div style={{ paddingLeft: 8, borderLeft: "2px solid #1E2A3A", marginLeft: 4 }}>
+                          {/* Step outputs checklist */}
+                          <div style={{ marginBottom: 4 }}>
+                            {step.outputs.map((o) => (
+                              <div key={o} style={{ fontSize: 8, color: completedSteps.has(MDMP_STEPS.indexOf(step)) ? "#3EAF5C" : "#566A80", paddingLeft: 4 }}>
+                                {completedSteps.has(MDMP_STEPS.indexOf(step)) ? "✓" : "○"} {o}
+                              </div>
+                            ))}
+                          </div>
+                          {/* Agent entries */}
+                          {[...agentIds].filter((aid) => aid !== "xo_synthesis").map((agentId) => {
+                            const kb = kbStep[agentId];
+                            const local = localStep[agentId];
+                            const agent = STAFF[agentId];
+                            if (!agent) return null;
+                            const preview = kb?.summary || (typeof local === "string" ? (local.length > 150 ? local.slice(0, 150) + "..." : local) : "");
+                            if (!preview || preview.startsWith("⚠")) return null;
+                            return (
+                              <button
+                                key={agentId}
+                                onClick={() => setActiveChannel(agentId)}
+                                style={{ display: "block", width: "100%", textAlign: "left", background: "none", border: "none", cursor: "pointer", padding: "4px 4px", borderRadius: 3, fontFamily: "inherit", marginBottom: 2, transition: "background 0.15s" }}
+                                onMouseEnter={(e) => e.currentTarget.style.background = "#1A2332"}
+                                onMouseLeave={(e) => e.currentTarget.style.background = "none"}
+                                title={`Click to open ${agent.short} channel`}
+                              >
+                                <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                                  <span style={{ color: agent.color, fontSize: 9 }}>{agent.icon}</span>
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: agent.color }}>{agent.short}</span>
+                                  <span style={{ fontSize: 8, color: "#566A80" }}>— {agent.wff?.split("/")[0]}</span>
+                                </div>
+                                <div style={{ fontSize: 8, color: "#7A8A9E", lineHeight: 1.4, paddingLeft: 13, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                                  {preview.slice(0, 200)}
+                                </div>
+                              </button>
+                            );
+                          })}
+                          {/* XO Synthesis entry */}
+                          {kbStep.xo_synthesis && (
+                            <div style={{ marginTop: 4, padding: "4px 4px", borderTop: "1px dashed #1E2A3A" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                                <span style={{ color: "#D4A843", fontSize: 9 }}>⚔</span>
+                                <span style={{ fontSize: 9, fontWeight: 700, color: "#D4A843" }}>XO SYNTHESIS</span>
+                              </div>
+                              <div style={{ fontSize: 8, color: "#B8C4D4", lineHeight: 1.4, paddingLeft: 13, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                                {kbStep.xo_synthesis.summary?.slice(0, 200) || ""}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
 
+              {/* Export Brief buttons */}
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#566A80", textTransform: "uppercase", marginTop: 8, marginBottom: 4 }}>EXPORT BRIEF</div>
               <button style={{ ...S.btn("#D4A843", exporting), width: "100%", padding: 6, fontSize: 9, marginBottom: 4 }} disabled={exporting} onClick={() => exportBrief("decision_brief")}>📄 CDR Decision Brief</button>
               <button style={{ ...S.btn("#4A9EE8", exporting), width: "100%", padding: 6, fontSize: 9, marginBottom: 4 }} disabled={exporting} onClick={() => exportBrief("opord_summary")}>📋 OPORD Summary</button>
