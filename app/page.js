@@ -272,20 +272,37 @@ export default function WarRoom() {
     postMsg("cop", "SYSTEM", "#D4A843", `═══════════════════════════════════════\n  25 ID STAFF: STEP ${step.num} — ${step.title.toUpperCase()}\n═══════════════════════════════════════\n\nLead: ${step.lead.map((l) => STAFF[l]?.short).join(", ")}\nSupporting: ${step.support.map((s) => STAFF[s]?.short).join(", ")}\nOutputs: ${step.outputs.join(", ")}\n\nAll sections working...`, true);
     const allAgents = [...step.lead, ...step.support], results = {};
     for (const a of allAgents) postMsg(a, STAFF[a].title, STAFF[a].color, `Roger. Working Step ${step.num}...`, true);
-    // Run agents ONE AT A TIME with Haiku (faster + higher output token limit)
+    // Run agents ONE AT A TIME — 1500 token cap + 2s gaps to stay within Tier 1 output token limit (8K/min)
     for (const a of allAgents) {
       const agent = STAFF[a];
-      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise but thorough — focus on actionable items.`);
+      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise — focus on actionable items, under 800 words.`, { maxTokens: 1500 });
       results[a] = result;
       postMsg(a, agent.title, agent.color, result, true);
-      postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 600 ? result.slice(0, 600) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
+      postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 400 ? result.slice(0, 400) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
       await new Promise(r => setTimeout(r, 2000)); // 2s gap between agents
     }
-    // XO synthesis — truncate each agent's output to keep prompt small (avoids Vercel 30s timeout)
-    await new Promise(r => setTimeout(r, 3000));
-    const xoInputs = Object.entries(results).map(([i, t]) => `── ${STAFF[i]?.title} ──\n${typeof t === "string" ? t.slice(0, 800) : t}`).join("\n\n");
-    const xo = await callAgent("xo", `XO: Step ${step.num} complete. Staff outputs (summaries):\n\n${xoInputs}\n\nProvide: 1) BLUF 2) Key sync issues 3) Top info gaps 4) Risk assessment 5) Recommendation. Be concise.`);
-    postMsg("cop", "25 ID XO", "#D4A843", `══ STEP ${step.num} SYNTHESIS ══\n\n${xo}`, true);
+    // XO synthesis — 15s delay for rate limit recovery, aggressive truncation, graceful fallback
+    postMsg("cop", "SYSTEM", "#D4A843", "All sections reported. XO synthesizing...", true);
+    await new Promise(r => setTimeout(r, 15000)); // 15s gap — lets output token rate limit window slide
+    const xoInputs = Object.entries(results)
+      .filter(([_, t]) => typeof t === "string" && !t.startsWith("⚠"))
+      .map(([i, t]) => `${STAFF[i]?.short || i}: ${t.slice(0, 400)}`)
+      .join("\n\n");
+    let xo;
+    try {
+      xo = await callAgent("xo", `XO: Synthesize Step ${step.num}.\n\n${xoInputs}\n\nBLUF, key issues, gaps, risks. Under 400 words.`, { maxTokens: 800, retries: 1 });
+    } catch (e) { xo = null; }
+    // Graceful fallback if XO fails (timeout, rate limit, etc.)
+    if (xo && !xo.startsWith("⚠")) {
+      postMsg("cop", "25 ID XO", "#D4A843", `══ STEP ${step.num} SYNTHESIS ══\n\n${xo}`, true);
+    } else {
+      const completed = Object.entries(results).filter(([_, t]) => typeof t === "string" && !t.startsWith("⚠")).map(([id]) => STAFF[id]?.short || id);
+      const failed = Object.entries(results).filter(([_, t]) => typeof t === "string" && t.startsWith("⚠")).map(([id]) => STAFF[id]?.short || id);
+      let fallback = `══ STEP ${step.num} SUMMARY ══\n\n✓ Sections reported: ${completed.join(", ")}`;
+      if (failed.length > 0) fallback += `\n⚠ Errors: ${failed.join(", ")}`;
+      fallback += `\n\nXO synthesis unavailable (API cooldown). Review individual staff channels for full outputs.`;
+      postMsg("cop", "25 ID XO", "#D4A843", fallback, true);
+    }
     postMsg("cop", "SYSTEM", "#D4A843", `✓ Step ${step.num} COMPLETE\n${step.outputs.map((o) => `  ✓ ${o}`).join("\n")}\n\nReview outputs, interact with any section, or proceed.`, true);
     const nO = { ...stepOutputs, [step.id]: results }, nC = new Set([...completedSteps, si]);
     setStepOutputs(nO); setCompletedSteps(nC); setIsRunning(false);
