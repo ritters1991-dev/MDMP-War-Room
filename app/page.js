@@ -4,6 +4,24 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { db, ref, push, onValue, set, get, remove, off, onDisconnect } from "../lib/firebase";
 import { STAFF, MDMP_STEPS, buildSystemPrompt } from "../lib/mdmp";
 
+// Built-in documents — hardcoded into every agent's system prompt (no upload needed)
+const BUILT_IN_SCENARIO = [
+  { name: "W500 — Operation Pacific Pugilist (Full OPORD)", tag: "CODED" },
+];
+const BUILT_IN_DOCTRINE = [
+  { name: "FM 5-0 — Planning & Orders Production", tag: "CODED" },
+  { name: "FM 6-0 — Commander & Staff Organization", tag: "CODED" },
+  { name: "FM 3-0 / ADP 3-0 — Operations", tag: "CODED" },
+  { name: "FM 3-94 — Theater Army, Corps, Division Ops", tag: "CODED" },
+  { name: "FM 2-0 / ATP 2-01.3 — Intelligence", tag: "CODED" },
+  { name: "FM 3-09 / FM 3-60 — Fires", tag: "CODED" },
+  { name: "FM 4-0 / ATP 4-90 — Sustainment", tag: "CODED" },
+  { name: "ADP 3-37 / FM 3-01 — Protection", tag: "CODED" },
+  { name: "FM 6-02 / ADP 6-0 — Signal & Mission Cmd", tag: "CODED" },
+  { name: "JP 5-0 — Joint Planning", tag: "CODED" },
+  { name: "ATP 5-19 — Risk Management", tag: "CODED" },
+];
+
 const ts = () => new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const sanitizeKey = (s) => s.replace(/[.#$[\]\/]/g, "_");
@@ -458,38 +476,33 @@ export default function WarRoom() {
       <div style={S.sub}>Share code with team</div>
       <div style={S.rcb}><span style={S.rc}>{roomId}</span><button style={{ ...S.btn("#2A3A4A", false), padding: "6px 12px", fontSize: 10 }} onClick={() => navigator.clipboard?.writeText(roomId)}>COPY</button></div>
       <div style={{ margin: "12px 0 8px", display: "flex", gap: 6, flexWrap: "wrap" }}>{participants.map((p) => <span key={p.sessionId} style={S.pt}><span style={S.dot} /> {p.callsign}</span>)}</div>
-      {(Object.keys(library.doctrine).length > 0 || Object.keys(library.scenario).length > 0) && (<div style={{ margin: "16px 0 8px" }}>
-        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#D4A843", textTransform: "uppercase" }}>SELECT FROM LIBRARY</span>
-        {Object.keys(library.doctrine).length > 0 && (<div style={{ marginTop: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 9, color: "#4A9EE8", fontWeight: 700 }}>DOCTRINE</span><button style={{ background: "none", border: "none", color: "#4A9EE8", cursor: "pointer", fontSize: 9, fontFamily: "inherit" }} onClick={() => selectAll("doctrine")}>Select All</button></div>
-          {Object.entries(library.doctrine).map(([k, d]) => <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 8px", cursor: "pointer", fontSize: 11, color: selectedDocs.has(k) ? "#B8C4D4" : "#566A80" }}><input type="checkbox" checked={selectedDocs.has(k)} onChange={() => toggleDoc(k, "doctrine")} style={{ accentColor: "#4A9EE8" }} />📄 {d.name}</label>)}
-        </div>)}
-        {Object.keys(library.scenario).length > 0 && (<div style={{ marginTop: 8 }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontSize: 9, color: "#E05555", fontWeight: 700 }}>SCENARIO</span><button style={{ background: "none", border: "none", color: "#E05555", cursor: "pointer", fontSize: 9, fontFamily: "inherit" }} onClick={() => selectAll("scenario")}>Select All</button></div>
-          {Object.entries(library.scenario).map(([k, d]) => <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 8px", cursor: "pointer", fontSize: 11, color: selectedScenarios.has(k) ? "#B8C4D4" : "#566A80" }}><input type="checkbox" checked={selectedScenarios.has(k)} onChange={() => toggleDoc(k, "scenario")} style={{ accentColor: "#E05555" }} />📋 {d.name}</label>)}
-        </div>)}
-      </div>)}
-      <label style={{ ...S.label, marginTop: 12 }}>OR UPLOAD NEW</label>
-      <div style={{ display: "flex", gap: 8 }}>
-        {["scenario", "doctrine"].map((t) => <div key={t} style={{ position: "relative", flex: 1 }}><input type="file" multiple accept=".txt,.md,.doc,.docx,.pdf" onChange={(e) => uploadToLibrary(e, t)} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", zIndex: 2 }} /><div style={S.ub}>{t === "scenario" ? "📋 Scenario" : "📄 Doctrine"}</div></div>)}
+
+      {/* Built-in documents — native to the staff */}
+      <div style={{ margin: "16px 0 8px", padding: "12px", background: "#0A0E14", borderRadius: 6, border: "1px solid #1E2A3A" }}>
+        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#3EAF5C", textTransform: "uppercase", marginBottom: 8 }}>NATIVE STAFF DOCUMENTS</div>
+        <div style={{ fontSize: 10, color: "#566A80", marginBottom: 10 }}>Scenario and doctrine are coded into the virtual staff. No upload required.</div>
+        <div style={{ marginBottom: 6 }}>
+          <span style={{ fontSize: 9, color: "#E05555", fontWeight: 700, letterSpacing: 1 }}>SCENARIO</span>
+          {BUILT_IN_SCENARIO.map((d) => <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 8px", fontSize: 10, color: "#7A8A9E" }}><span style={{ color: "#3EAF5C", fontSize: 8, fontWeight: 700, background: "#3EAF5C18", padding: "1px 4px", borderRadius: 2, letterSpacing: 0.5 }}>{d.tag}</span> {d.name}</div>)}
+        </div>
+        <div>
+          <span style={{ fontSize: 9, color: "#4A9EE8", fontWeight: 700, letterSpacing: 1 }}>DOCTRINE ({BUILT_IN_DOCTRINE.length} publications)</span>
+          {BUILT_IN_DOCTRINE.map((d) => <div key={d.name} style={{ display: "flex", alignItems: "center", gap: 6, padding: "2px 8px", fontSize: 10, color: "#7A8A9E" }}><span style={{ color: "#3EAF5C", fontSize: 8, fontWeight: 700, background: "#3EAF5C18", padding: "1px 4px", borderRadius: 2, letterSpacing: 0.5 }}>{d.tag}</span> {d.name}</div>)}
+        </div>
       </div>
-      <UploadProgress progress={uploadProgress} />
-      <button style={{ ...S.btn("#D4A843", selectedDocs.size === 0 && selectedScenarios.size === 0), width: "100%", marginTop: 20, padding: 14 }} disabled={selectedDocs.size === 0 && selectedScenarios.size === 0}
+
+      <div style={{ fontSize: 10, color: "#566A80", textAlign: "center", margin: "8px 0" }}>Additional documents (SIGACTs, SITREPs, etc.) can be uploaded during the exercise.</div>
+
+      <button style={{ ...S.btn("#D4A843", false), width: "100%", marginTop: 12, padding: 14 }}
         onClick={() => {
           try {
-            const { dF, dT, sF, sT } = loadSelectedDocs();
             setPhase("warroom");
-            // Sync only file NAMES to Firebase — texts stay in local state to avoid "Write too large"
-            if (roomId) {
-              set(ref(db, `rooms/${roomId}/documents`), { docFiles: dF, scenarioFiles: sF }).catch((err) => console.error("Doc sync error:", err));
-            }
-            // Post welcome message after a short delay to ensure roomId is live
             setTimeout(() => {
-              postMsg("cop", "SYSTEM", "#D4A843", `25th Infantry Division War Room ACTIVE\nRoom: ${roomId}\nDoctrine: ${dF.length} files | Scenario: ${sF.length} files\n\n▸ RUN STEP 1 to begin MDMP\n▸ Chat any staff section to interact\n▸ Staff will flag missing doctrine`, true);
+              postMsg("cop", "SYSTEM", "#D4A843", `25th Infantry Division War Room ACTIVE\nRoom: ${roomId}\nScenario: W500 — Operation Pacific Pugilist (CODED)\nDoctrine: ${BUILT_IN_DOCTRINE.length} publications (CODED)\n\n▸ RUN STEP 1 to begin MDMP\n▸ Chat any staff section to interact\n▸ Upload SIGACTs/SITREPs during exercise to update the staff`, true);
             }, 500);
           } catch (err) {
             console.error("Enter war room error:", err);
-            setPhase("warroom"); // Force transition even on error
+            setPhase("warroom");
           }
         }}>ENTER WAR ROOM →</button>
     </div></div></div>);
@@ -570,7 +583,7 @@ export default function WarRoom() {
                 <span style={{ flex: 1 }}>{step.title}</span>
               </button>
             ))}
-            <button style={{ ...S.btn("#D4A843", isRunning || (scenarioFiles.length === 0 && docFiles.length === 0)), width: "100%", marginTop: 8, padding: 8 }} disabled={isRunning || (scenarioFiles.length === 0 && docFiles.length === 0)}
+            <button style={{ ...S.btn("#D4A843", isRunning), width: "100%", marginTop: 8, padding: 8 }} disabled={isRunning}
               onClick={() => runStep(completedSteps.size === 0 ? 0 : Math.min(completedSteps.size, MDMP_STEPS.length - 1))}>
               {isRunning ? <><Spinner /> RUNNING...</> : completedSteps.size === 0 ? "▶ RUN STEP 1" : completedSteps.size >= MDMP_STEPS.length ? "✓ COMPLETE" : `▶ RUN STEP ${completedSteps.size + 1}`}
             </button>
@@ -583,23 +596,42 @@ export default function WarRoom() {
           <div style={{ ...S.rps, flex: 1, overflowY: "auto" }}>
             <div style={S.rpt}>SESSION DOCUMENTS</div>
 
-            {/* SCENARIO - collapsible */}
+            {/* BUILT-IN SCENARIO - collapsible */}
             <button onClick={() => setScenarioOpen(!scenarioOpen)} style={S.collapseBtn}>
               <span style={{ color: "#E05555", fontSize: 10 }}>{scenarioOpen ? "▼" : "▶"}</span>
-              <span style={{ fontSize: 9, color: "#E05555", fontWeight: 700, letterSpacing: 1 }}>SCENARIO ({scenarioFiles.length})</span>
+              <span style={{ fontSize: 9, color: "#E05555", fontWeight: 700, letterSpacing: 1 }}>SCENARIO ({BUILT_IN_SCENARIO.length})</span>
             </button>
-            {scenarioOpen && scenarioFiles.map((f) => <div key={f} style={S.ft}>📋 {f}</div>)}
+            {scenarioOpen && BUILT_IN_SCENARIO.map((d) => (
+              <div key={d.name} style={{ ...S.ft, gap: 4 }}>
+                <span style={{ color: "#3EAF5C", fontSize: 7, fontWeight: 700, background: "#3EAF5C18", padding: "1px 3px", borderRadius: 2, letterSpacing: 0.5, flexShrink: 0 }}>{d.tag}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+              </div>
+            ))}
 
-            {/* DOCTRINE - collapsible */}
+            {/* BUILT-IN DOCTRINE - collapsible */}
             <button onClick={() => setDoctrineOpen(!doctrineOpen)} style={{ ...S.collapseBtn, marginTop: 6 }}>
               <span style={{ color: "#4A9EE8", fontSize: 10 }}>{doctrineOpen ? "▼" : "▶"}</span>
-              <span style={{ fontSize: 9, color: "#4A9EE8", fontWeight: 700, letterSpacing: 1 }}>DOCTRINE ({docFiles.length})</span>
+              <span style={{ fontSize: 9, color: "#4A9EE8", fontWeight: 700, letterSpacing: 1 }}>DOCTRINE ({BUILT_IN_DOCTRINE.length})</span>
             </button>
-            {doctrineOpen && docFiles.map((f) => <div key={f} style={S.ft}>📄 {f}</div>)}
+            {doctrineOpen && BUILT_IN_DOCTRINE.map((d) => (
+              <div key={d.name} style={{ ...S.ft, gap: 4 }}>
+                <span style={{ color: "#3EAF5C", fontSize: 7, fontWeight: 700, background: "#3EAF5C18", padding: "1px 3px", borderRadius: 2, letterSpacing: 0.5, flexShrink: 0 }}>{d.tag}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.name}</span>
+              </div>
+            ))}
+
+            {/* UPLOADED DOCUMENTS — SIGACTs, SITREPs, etc. added during exercise */}
+            {(docFiles.length > 0 || scenarioFiles.length > 0) && (
+              <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px dashed #1E2A3A" }}>
+                <span style={{ fontSize: 9, color: "#D4A843", fontWeight: 700, letterSpacing: 1 }}>UPLOADED ({docFiles.length + scenarioFiles.length})</span>
+                {scenarioFiles.map((f) => <div key={f} style={S.ft}>📋 {f}</div>)}
+                {docFiles.map((f) => <div key={f} style={S.ft}>📄 {f}</div>)}
+              </div>
+            )}
 
             <div style={{ position: "relative", marginTop: 8 }}>
-              <input type="file" multiple accept=".txt,.md,.doc,.docx,.pdf" onChange={(e) => handleUpload(e, "scenario")} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", zIndex: 1 }} />
-              <div style={S.ub}>+ Add Documents</div>
+              <input type="file" multiple accept=".txt,.md,.doc,.docx,.pdf" onChange={(e) => handleUpload(e, "doctrine")} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", zIndex: 1 }} />
+              <div style={S.ub}>+ Upload SIGACTs / SITREPs / Updates</div>
             </div>
             <UploadProgress progress={uploadProgress} />
           </div>
