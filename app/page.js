@@ -86,6 +86,7 @@ export default function WarRoom() {
   const [callsign, setCallsign] = useState("");
   const [roomId, setRoomId] = useState("");
   const [joinRoomId, setJoinRoomId] = useState("");
+  const [savedSession, setSavedSession] = useState(null); // { roomId, callsign } from localStorage
 
   const [library, setLibrary] = useState({ doctrine: {}, scenario: {} });
   const [docFiles, setDocFiles] = useState([]);
@@ -133,6 +134,17 @@ export default function WarRoom() {
   ];
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages[activeChannel]?.length]);
+
+  // Check for saved session on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("mdmp_session");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.roomId && parsed.callsign) setSavedSession(parsed);
+      }
+    } catch {}
+  }, []);
 
   // Load library
   useEffect(() => {
@@ -197,11 +209,15 @@ export default function WarRoom() {
     const id = Math.random().toString(36).slice(2, 8).toUpperCase();
     setRoomId(id);
     set(ref(db, `rooms/${id}`), { created: Date.now(), status: "active" });
+    // Persist session for rejoin
+    try { localStorage.setItem("mdmp_session", JSON.stringify({ roomId: id, callsign })); } catch {}
     return id;
-  }, []);
+  }, [callsign]);
 
   const joinRoom = useCallback((id) => {
     setRoomId(id);
+    // Persist session for rejoin
+    try { localStorage.setItem("mdmp_session", JSON.stringify({ roomId: id, callsign })); } catch {}
     const presRef = ref(db, `rooms/${id}/participants/${sessionId}`);
     set(presRef, { callsign, joinedAt: Date.now(), lastSeen: Date.now() });
     const hb = setInterval(() => set(ref(db, `rooms/${id}/participants/${sessionId}/lastSeen`), Date.now()), 10000);
@@ -355,16 +371,19 @@ export default function WarRoom() {
     }
   }, [inputText, activeChannel, callsign, messages, isRunning, getDocContext, getPrevOutputs, postMsg]);
 
-  // Export brief
+  // Export brief — streaming response (same pattern as callAgent)
   const exportBrief = useCallback(async (type) => {
     setExporting(true); setShowExport(true); setExportText("Generating brief...");
     try {
-      const res = await fetch("/api/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stepOutputs, completedSteps: [...completedSteps], type }) });
-      const data = await res.json();
+      const res = await fetch("/api/export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stepOutputs, knowledgeBase, completedSteps: [...completedSteps], type }) });
+      const rawText = await res.text();
+      const trimmed = rawText.trim();
+      let data;
+      try { data = JSON.parse(trimmed); } catch { setExportText("Error: Server returned non-JSON (possible timeout). Try again."); setExporting(false); return; }
       setExportText(data.error ? `Error: ${data.error}` : data.text);
     } catch (e) { setExportText(`Error: ${e.message}`); }
     setExporting(false);
-  }, [stepOutputs, completedSteps]);
+  }, [stepOutputs, knowledgeBase, completedSteps]);
 
   const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } };
 
@@ -373,6 +392,16 @@ export default function WarRoom() {
     return (<div style={S.root}><div style={S.over}><div style={S.box}>
       <div style={S.logo}>⚔ 25 ID MDMP WAR ROOM</div>
       <div style={S.sub}>25th Infantry Division "Tropic Lightning" — Virtual Staff Platform</div>
+      {savedSession && (
+        <div style={{ padding: "12px", background: "rgba(74, 158, 232, 0.08)", borderRadius: 6, border: "1px solid rgba(74, 158, 232, 0.3)", marginBottom: 16 }}>
+          <div style={{ fontSize: 10, color: "#4A9EE8", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PREVIOUS SESSION FOUND</div>
+          <div style={{ fontSize: 12, color: "#C0CCD8", marginBottom: 8 }}>Room <span style={{ color: "#D4A843", fontWeight: 700 }}>{savedSession.roomId}</span> as <span style={{ color: "#4A9EE8", fontWeight: 700 }}>{savedSession.callsign}</span></div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button style={{ ...S.btn("#4A9EE8", false), flex: 1 }} onClick={() => { setCallsign(savedSession.callsign); joinRoom(savedSession.roomId); setPhase("lobby"); }}>RESUME SESSION</button>
+            <button style={{ flex: 0, padding: "8px 12px", background: "transparent", border: "1px solid #2A3A4A", borderRadius: 4, color: "#566A80", fontSize: 10, cursor: "pointer" }} onClick={() => { try { localStorage.removeItem("mdmp_session"); } catch {} setSavedSession(null); }}>DISMISS</button>
+          </div>
+        </div>
+      )}
       <label style={S.label}>YOUR CALLSIGN</label>
       <input style={S.ti} placeholder="e.g. LIGHTNING 6, MAJ Smith" value={callsign} onChange={(e) => setCallsign(e.target.value)} />
       {(Object.keys(library.doctrine).length > 0 || Object.keys(library.scenario).length > 0) && (
