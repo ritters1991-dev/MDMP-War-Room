@@ -27,6 +27,12 @@ const BUILT_IN_DOCTRINE = [
   { name: "FM 4-30 — Ordnance Operations", tag: "CODED" },
   { name: "FM 3-14 — Army Space Operations", tag: "CODED" },
   { name: "25ID O&FF Fires Analysis — OAKOC Terrain Product", tag: "CODED" },
+  { name: "ATP 3-09.12 — Counterfire & WLR Operations", tag: "CODED" },
+  { name: "ATP 3-09.90 — DIVARTY Operations & Fire Support", tag: "CODED" },
+  { name: "ATP 3-09.23 — FA Cannon Battalion Operations", tag: "CODED" },
+  { name: "ATP 3-09.42 — Fire Support for the BCT", tag: "CODED" },
+  { name: "FM 90-13 / ATP 3-90.4 — Combined Arms Gap Crossing", tag: "CODED" },
+  { name: "ATP 3-34.22 / FM 3-34 — Engineer Operations", tag: "CODED" },
 ];
 
 const ts = () => new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
