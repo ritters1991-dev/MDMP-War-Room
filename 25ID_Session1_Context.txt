@@ -1,0 +1,333 @@
+25ID MDMP WAR ROOM — PRIOR SESSION CONTEXT (ROOM Q6HUKA)
+EXPORTED: 2026-03-03 | STEPS COMPLETED: Receipt of Mission, Mission Analysis
+PURPOSE: This document captures all human staff corrections, commander's guidance,
+approved products, and confirmed data from the initial MDMP session. The AI staff
+MUST incorporate this context when re-running Steps 1 and 2 with updated spatial data.
+
+================================================================================
+SECTION 1: COMMANDER'S GUIDANCE & RESPONSE STANDARDS
+================================================================================
+
+CDR GUIDANCE (TEST-6, established D+10):
+- Staff answers must be succinct but provide complete analysis: WHAT / SO WHAT / THEREFORE
+- Reference specific doctrine (FM/ATP/ADP paragraph numbers) and OPORD citations
+- Do NOT fabricate data — if unsure, ASK the human staff for clarification
+- Recommendations must be clearly labeled as "RECOMMENDATION" with analytical logic
+- NEVER make up locations (PAAs, nodes, grid coordinates) — only confirmed scenario data
+
+RESPONSE LENGTH STANDARD:
+- Answers to human staff questions: LIMIT TO 200 WORDS maximum
+- Then note "Request additional analysis if needed" so the human can ask for more
+- Use discretion — simple questions get shorter answers
+- EXCEPTION: Major MDMP step products (Step 1-7 outputs) should be LONG, comprehensive,
+  and integrate/analyze everything. These are the formal staff products.
+- The 200-word limit applies ONLY to conversational Q&A with human staff
+
+LEARNING FROM CORRECTIONS:
+- When a human staff member corrects you, LEARN from it and do NOT repeat the error
+- Treat human corrections as ground truth — update your analysis accordingly
+- If the same topic comes up again, apply the correction automatically
+- Acknowledge corrections concisely ("Roger, correcting") — do not over-explain
+
+ANALYSIS LOGIC CHAIN (ALL STAFF — especially G4):
+When assessing equipment, capabilities, or making recommendations, follow this order:
+1. DOCTRINE — what does the FM/ATP say about how this should work?
+2. TASK ORGANIZATION (scenario) — what units/equipment does 25ID actually have per OPORD?
+3. REALITY-TO-SCENARIO DELTA — what differs from standard doctrinal organization?
+4. UNIT COMPOSITION & CAPABILITIES HANDBOOK — cross-reference for ground truth on
+   actual equipment types, quantities, and capabilities assigned to specific units
+5. RECOMMENDATION — based on scenario ground truth, NOT generic doctrinal assumptions
+6. ASK BEFORE ANSWERING if you need clarification on unit-specific data
+The Unit Composition and Capabilities Handbook is the AUTHORITATIVE source for what
+units have. Doctrine tells you how to employ it. Do not recommend based on doctrine
+alone when the handbook provides specific scenario data.
+
+================================================================================
+SECTION 2: CRITICAL FIRES CORRECTIONS (NARC / NARCs Agent / Mya Rogers)
+These corrections are MANDATORY — do not repeat these errors.
+================================================================================
+
+FSCL/CFL ERROR (CRITICAL):
+- FSCL is PL AQUA — set by Sixth Army — it does NOT shift
+- CFL shifts: PL BANANA (Ph I) -> o/o PL CHERRY (Ph II) -> o/o PL FIG (Ph II) -> o/o PL BLUE (Ph III)
+- Every reference to "FSCL shift" in prior products was WRONG. The CFL shifts, not the FSCL.
+
+SR-4 RANGE: 40-80km (NOT 70-130km). SR-4 is a 122mm MRL, not a 300mm system.
+
+MUNITIONS ASL: Use OPORD CSR table ONLY — never fabricate numbers:
+- M795 HE = 15 rds/sys/day
+- M825 WP = 8 rds/sys/day
+- M549A1 RAP = 14 rds/sys/day
+- XM982 Excalibur = 2 rds/sys/day
+- DPICM M483A1 = 90 rds/sys/day
+- GMLRS M30/M31 = 0.7 rds/lnchr/day
+- Constraint: 2 UBL on-hand maximum
+
+WEAPON SYSTEMS:
+- No ATACMS or ER-GMLRS available to 25ID (Corps only)
+- GMLRS max range 84km is the organic influence limit
+- Apaches are NOT used for SEAD
+- 3-7 FA does NOT have a rocket platoon — composite batteries are 2x 105mm + 1x 155mm
+- DIVARTY HHBs have organic Q-53 radars — account for these
+- 3 ASOS and I Corps fires are NOT joint — they are higher echelon, same service
+
+CONFIRMED FSCM:
+- FSCL: PL AQUA (Sixth Army, fixed)
+- CFL: PL BANANA -> o/o PL CHERRY (DP1) -> o/o PL FIG (DP3) -> o/o PL BLUE (Ph III)
+- Coordinating Altitude: 21,000 ft MSL
+- Coordination Level: 3,000 ft AGL
+- CFL changes require 12-hr coordination via Corps Targeting Board
+
+PLANNING CONSTRAINTS:
+- 2 UBL on-hand max (corps transportation priority)
+- CSR increase requires I Corps G4 approval
+- WP prohibited near civilian areas/built-up areas
+- Cluster munitions west of PL BANANA: >1% UXO = Corps CDR approval
+- SEAD only against confirmed ADA targets that cannot be engaged with rockets
+- CDE/PID required for all pre-planned fires
+- Unobserved fires: O-8 CDR approval when in contact
+- Scatterable mines 15-day = corps authority only; divisions limited to 4/48hr self-destruct
+- ATO submission 0001Z, 24 hrs prior — limits preplanned CAS flexibility
+
+CONFIRMED PLANNING FACTORS:
+- M825 WP: ~3-5 min screening per round; 1 BN = 144 WP rds/day at CSR
+- 4-hr smoke screen needs ~48-80 rds/hr depending on wind
+- TPQ-53: ~15km (6400-mil), ~30km (1600-mil); target-to-trigger <3 min CF standard
+- PLZ-52 range: ~39km base, ~53km ERFB-BB
+- 25ID can mass 54x 155mm + 27x HIMARS for decisive effects
+
+================================================================================
+SECTION 3: APPROVED FIRES PRODUCTS
+================================================================================
+
+--- 3A: FIRES MISSION ANALYSIS (NARC, FSCOORD/DIVARTY) ---
+
+BOTTOM LINE: 25ID has adequate fires to support PACIFIC PUGILIST but faces three
+critical gaps: (1) smoke CSR insufficient for sustained WGX screen, (2) PLZ-52
+outranges our 155mm by ~15km, and (3) 2 UBL ammo ceiling limits sustained high-rate
+fires. Requires corps support to mitigate.
+
+ESSENTIAL TASKS (Fires):
+ET-1: NEUTRALIZE 1658 FA (27x PLZ-52, 9x SR-4, 2x SLC-2E) before/during WGX
+ET-2: OBSCURE crossing site(s) — continuous 4-8hr smoke screen
+ET-3: SUPPRESS 1659 AD (18x PGZ-09, 6x HQ-17A) to enable CAS/ATK AVN
+ET-4: DESTROY 165 BCG defensive positions with preparation fires
+ET-5: Sustain CL V >= 3 DOS throughout WGX window
+ET-6: Protect AN/TPQ-53 CF radars (PPL Priority 1 & 2)
+
+RESTATED MISSION (Fires): NLT D+13, 25ID DIVARTY NEUTRALIZES 1658 FA, OBSCURES
+Pa Sak crossing sites, SUPPRESSES 1659 AD, and DESTROYS 165 BCG defensive positions
+to enable WGX, seizure of OBJ BRONCOS/SEAHAWKS, and FPOL of 1AD.
+
+FIRES PROBLEM STATEMENT: How does DIVARTY enable 25ID's WGX against 165 BCG with
+artillery overmatch, layered ADA, and EW capability — while constrained by limited
+smoke CSR, 2 UBL ceiling, no ground smoke generators, and simultaneous CF/obscuration/
+prep fires/SEAD requirements within a 4-8hr crossing window?
+
+TOP RISKS:
+HIGH: Fratricide at WGX — converging fires + multiple BCTs + engineers in compressed space
+HIGH: CF from 1658 FA — PLZ-52 outranges 155mm by 15km; 2x SLC-2E locate our guns
+HIGH: Smoke screen failure — CSR = 336 WP rds/day; need 192-480 for 4-8hr screen
+MOD: ADA vs CAS/AVN — layered 1659 AD threatens 8 CAS sorties + AH-64 support
+MOD: Ammo sustainability — 2 UBL cap + high WGX consumption + single MSR resupply
+MOD: EW vs GPS munitions — 165 OSB EW suite degrades Excalibur/GMLRS precision
+
+--- 3B: HIGH-PAYOFF TARGET LIST (NARC, 6 Categories) ---
+
+Fires — 1658 FA: 27x PLZ-52 (155mm SPH), 9x SR-4 (122mm MRL), 2x SLC-2E radars, CH-91 UAS
+Air Defense — 1659 AD: 18x PGZ-09 AA, 6x HQ-17A SHORAD
+C2 — 165 BCG Main CP: ACV ZBL-08C, APC YW-534 (may require joint fires due to mobility)
+Intelligence/TA — 1658 FA TAP: 2x SLC-2E counterfire radars, EW assets (JN-1105A, TDK-038)
+Movement & Maneuver — 165 BCG CA-Bns at crossing sites: MBT Type-99A2, IFV ZBD-04A
+Sustainment — 165 SSB: fuel tankers, cargo trucks, ammo resupply
+
+--- 3C: ATTACK GUIDANCE MATRIX (NARC, Phase II WGX, 8 HPTs) ---
+
+HPT 1 (Priority 1): 1658 FA — PLZ-52 SPH Batteries (27x 155mm)
+  When: Phase II, continuous. Trigger: Q-53 acquisition or MQ-1C detection
+  Effect: DESTROY — min 30% of firing platforms per ATO cycle
+  Primary: 45 FA GMLRS (counterfire HQ) | Alt: 17 FA GMLRS; CAS (F-35, 2x sorties)
+  Assessment: P: 201 MI / MQ-1C | A: Q-53 radar / IMINT BDA
+
+HPT 2 (Priority 1): 1658 FA — SR-4 MRL Battery (9x 122mm)
+  When: Phase II, immediate. Trigger: Q-53 acquisition or ELINT signature
+  Effect: DESTROY — 2+ launchers per engagement
+  Primary: 45 FA GMLRS (shoot-look-shoot) | Alt: CAS (2x F-35); 17 FA ER-GMLRS
+  Assessment: P: AI / SCAR | A: 45 FA / Q-53
+
+HPT 3 (Priority 1): 1658 FA TAP — SLC-2E Counterfire Radars (2x)
+  When: Phase II, immediate. Trigger: ELINT detection of radar emissions
+  Effect: DESTROY — both radars (critical enabler)
+  Primary: 45 FA ER-GMLRS (precision) | Alt: CAS (F-35); CEMA electronic disruption
+  Assessment: P: 201 MI / ELINT | A: 201 MI / SIGINT
+
+HPT 4 (Priority 2): 1659 AD — HQ-17A SHORAD (6x)
+  When: Phase II, before CAS/ATK AVN commitment. Trigger: ELINT of HQ-17A search radar
+  Effect: DESTROY — min 1-2 systems per engagement. Suppress during CAS windows.
+  Primary: 45 FA GMLRS (SEAD, JAGIC coord) | Alt: 17 FA GMLRS; CEMA electronic attack
+  Assessment: P: 201 MI / ELINT | A: 201 MI / MQ-1C
+
+HPT 5 (Priority 2): 1659 AD — PGZ-09 AA Guns (18x)
+  When: Phase II, suppress during crossing and CAS windows
+  Effect: SUPPRESS during CAS; DESTROY when positively located
+  Primary: BCT FA (M777 155mm HE/VT); 45 FA GMLRS for destroy | Alt: AH-64E Hellfire
+  Assessment: P: TF 1-3 AV / MQ-1C | A: BCT FSOs / JTAC BDA
+
+HPT 6 (Priority 3): 165 BCG MCP — ACV ZBL-08C (C2 Node)
+  When: Phase II, on confirmed COMINT/IMINT. Timed to crossing.
+  Effect: DISRUPT C2 for min 3 hrs; DESTROY C2 vehicles if PID
+  Primary: CEMA/IO cyber disruption (non-kinetic) | Alt: 17 FA GMLRS; CAS
+  Assessment: P: MDC-P / Cyber | A: 201 MI / COMINT
+
+HPT 7 (Priority 4): 165 BCG CA-Bns — MBT Type-99A2, IFV ZBD-04A
+  When: Phase II, on-order. Trigger: armor moving to counter-attack crossing sites
+  Effect: DESTROY — min 4x platforms per engagement
+  Primary: 25 CAB AH-64E (Hellfire/JAGM) | Alt: 17/45 FA GMLRS; CAS (F-35)
+  Assessment: P: AI / SCAR | A: TF 1-3 AV / MQ-1C
+
+HPT 8 (Priority 5): 165 SSB — Sustainment Vehicles
+  When: Phase II, on-order. Engage at supply points or MSRs.
+  Effect: DESTROY — 6x trucks per engagement to degrade enemy logistics
+  Primary: 45 FA GMLRS | Alt: 17 FA GMLRS; CAS; 25 CAB ATK AVN
+  Assessment: P: 201 MI / MQ-1C | A: 201 MI / IMINT
+
+AGM COORDINATING NOTES:
+1. Counterfire is #1 priority. PLZ-52 outranges M777 (39km vs 30km). Silencing enemy
+   artillery is the precondition for everything else.
+2. SEAD before CAS. Attrit HQ-17A SHORAD before committing 8 CAS sorties.
+   Recommend 2 GMLRS SEAD fires against confirmed AD positions, then push CAS.
+3. CAS allocation (8 sorties Phase II): 2x anti-MRL, 2x anti-AD (SEAD),
+   2x anti-armor (CA-Bn counterattack), 2x on-call/flex. Submit to Corps targeting board.
+4. Corps support request: Flag 165 BCG MCP and HPTs exceeding GMLRS range for
+   Corps deep fires. 791 FA (PHL-03 300mm MRL, DF-11 SRBM) beyond 25ID capability.
+5. Smoke integration: 155mm smoke allocated to 25ID for WGX — deconflict with CF
+   and CAS timing windows.
+
+================================================================================
+SECTION 4: CONFIRMED FORCES AVAILABLE (Human-verified)
+================================================================================
+
+FIRES (Area of Influence — collated by Steve's Assistant):
+- 2-11 FA HIMARS (27x M142): 84 km GMLRS (no ATACMS to 25ID, Corps only)
+- 3-7 FA (COMP) M777A2: 30 km RAP / 40 km Excalibur
+- 1-37 FA M777A2: 30 km RAP
+- 4-27 FA M109A7: 30 km RAP
+- Counterfire: TPQ-53 (50 km sector / 35 km 360 deg), TPQ-50 LCMR (20 km, 360 deg)
+- Response time: less than 3 minutes
+- NOT available to 25ID: ER-GMLRS, ATACMS, naval fires
+
+AVIATION:
+- 1-25 AVN (24x AH-64E): ~180 km combat radius, deep attack and armed recon
+- D/25 AVN (4x MQ-1C Gray Eagle): Persistent ISR/strike
+- CAS: 8 sorties allocated Phase II (F-35, A-10, F-15E) via 3 ASOS TACPs
+
+ADA / C-UAS:
+- 6-56 ADA M-SHORAD: Stinger 5 km, Hellfire ~8 km, Interceptor ~8 km, Radar 30-50 km
+- Avenger: RMP/Stinger coverage ~5 km
+- D Battery DIVARTY C-sUAS: LMADIS 1-5 km, CRAM 2 km vs Gp 1-3 UAS
+- Coverage priorities: Div CP, BSAs, DSA, crossing sites K2/K3
+
+25 DSB TASK ORGANIZATION (confirmed by Molek):
+- 524 Support Battalion (DSSB): HHC, A CO (Supply/Svc), B CO (Petro/Water), C CO (Trans)
+- 365 Support Battalion (CSSB, Attached): HHC, 163 ORD CO (Ammo), 574 QM CO (CSC),
+  894 QM CO (POL SPT), 756 TRANS CO (POL 5K), 1173 TRANS CO (Light)
+- 569 Quartermaster Company (FF) — Field Feeding
+
+FUEL ASSET DATA (corrected by Molek):
+- 756 TC CO: 60x 5k trailers, 60x tractors
+- 574 QM CO: 26x 5k tanker trucks, 12x 5k trailers and tractors
+- 894 QM CO: 15x 5k trailers and tankers
+- Daily fuel estimate: ~700k gallons/day (NOT 23M — AI math error from prior session)
+
+CONFIRMED POSITIONS:
+- 25 ID Main CP: Grid 47PPS68958318 (confirmed by Ritter on map)
+- Key Terrain 5 = OBJ BRONCOS (confirmed by NARC)
+- Key Terrain 6 = OBJ SEAHAWKS (confirmed by NARC)
+
+================================================================================
+SECTION 5: MISSION ANALYSIS SUMMARY (XO Synthesis from Session 1)
+================================================================================
+
+RESTATED MISSION: On order, 25ID attacks in zone to destroy 165 BCG covering force,
+conducts deliberate wet gap crossing of Pa Sak River NLT D+15, seizes OBJ DRAGON
+(Chai Badan area), and continues attack to PL FIG NLT D+18.
+
+ASSESSMENT: Mission is FEASIBLE but HIGH RISK. Three critical challenges:
+(1) 180-degree reorientation under contact
+(2) Complex deliberate WGX of 50-100m river under fire
+(3) 16 ACG approaching from east — timeline pressure
+
+SPECIFIED TASKS (7 from I Corps):
+1. Occupy attack positions west of PL APPLE by D+13
+2. Conduct deliberate WGX of Pa Sak River
+3. Destroy 165 BCG covering force in zone
+4. Seize OBJ BRONCOS and OBJ SEAHAWKS
+5. BPT support 1AD FPOL through LANES DENVER/SEATTLE
+6. Maintain contact with 2/3ID (north) and 3DIV GBR (south)
+7. BPT assume I Corps reserve mission on order
+
+CRITICAL CAPABILITIES REQUIRED:
+- Engineer bridging for wet gap crossing (420 EN BDE DS)
+- Continuous smoke screen (4-8 hours)
+- Counterfire superiority over 1658 FA
+- SEAD to enable CAS/ATK AVN
+
+TIMELINE:
+- Current: D+10
+- LD: D+13 (130700MAR2030)
+- WGX: D+14/D+15
+- OBJ seizure: NLT D+18
+- 16 ACG lead elements: ~D+16-17 (must beat them to the passes)
+
+================================================================================
+SECTION 6: OPEN ITEMS / UNRESOLVED FROM SESSION 1
+================================================================================
+
+1. CROSSING SITE GRIDS: Justin flagged that AI-generated grid coordinates for WGX
+   sites were OUTSIDE the 25ID AO — crossing site grids need human verification
+2. PAA TERRAIN MASKING: Mya Rogers raised concern about intervening crests masking
+   IDF assets — PAA locations must account for mountain ridge terrain (immediate/
+   intervening crests up to 500m between PL APPLE-BANANA)
+3. ENEMY SCHEME OF FIRES (TCOA 2): Cronin requested full analysis for Threat COA 2
+   (Mobile Defense) — priorities of fires, FSCMs, EFSTs, airspace plan. Status unclear.
+4. GBL-131 MINE DISPENSER: Cronin requested enemy mine capabilities — response pending
+5. CEMA RUNNING ESTIMATE: AM requested nonlethal CEMA capabilities — limited follow-up
+6. FUEL LIFT SHORTFALL: Molek's analysis underway — AI calculated 23M gallons when
+   math should be ~7M for 10 days. Recalculation with corrected asset data pending.
+7. OBSERVATION & FIELDS OF FIRE: Document uploaded by NARCs Agent — staff review pending
+8. CORPS PAA ALIGNMENT: Mya Rogers directed that Division PAAs should be arrayed near
+   Corps PAA locations, kept to battery-sized, and must range PL Blue to PL Fig with GMLRS
+
+================================================================================
+SECTION 7: KEY INTELLIGENCE REQUIREMENTS (From Session 1)
+================================================================================
+
+PIRs (Fires-relevant):
+- Corps PIR 1: Where will 165 establish Frontal Blocking Zone?
+- Corps PIR 3: Where will 165 establish Frontier Defense Zone?
+- Corps PIR 5: Where will 165 position 1658 FA?
+- Corps PIR 7: Will 166 arrive PL BLUE earlier than D+17?
+- Fires IRs: 1658 FA PAAs/displacement patterns; SLC-2E radar locations; 1659 AD disposition
+
+FFIRs:
+- 45 FA occupies PAAs 455/456
+- 17 FA occupies PAA 173
+- 25ID prepared to seize OBJs BRONCOS/SEAHAWKS
+- Any main effort BDE drops below 1 DOS priority munitions (155, HIMARS, ATGM)
+- Any AN/TPQ-53 destroyed or NMC
+- MSR KANSAS or primary sustainment route goes red/black
+- 1 AH-64 CO (8 aircraft) down
+
+EEFIs:
+- Location of WGX site(s)
+- FA BN PAA locations and displacement plans
+- AN/TPQ-53 positions and sector coverage
+- Sustainment convoy schedules/routes
+- Location of CF and ADA assets
+- 1AD arrival/positioning/commitment
+
+================================================================================
+END OF PRIOR SESSION CONTEXT
+Staff: Incorporate ALL corrections and guidance above when producing new products.
+Do NOT repeat errors identified in Section 2.
+================================================================================

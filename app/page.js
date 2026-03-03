@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { db, ref, push, onValue, set, get, remove, off, onDisconnect } from "../lib/firebase";
 import { STAFF, MDMP_STEPS, buildSystemPrompt } from "../lib/mdmp";
+import OperationsMap from "./OperationsMap";
 
 // Built-in documents — hardcoded into every agent's system prompt (no upload needed)
 const BUILT_IN_SCENARIO = [
@@ -20,6 +21,12 @@ const BUILT_IN_DOCTRINE = [
   { name: "FM 6-02 / ADP 6-0 — Signal & Mission Cmd", tag: "CODED" },
   { name: "JP 5-0 — Joint Planning", tag: "CODED" },
   { name: "ATP 5-19 — Risk Management", tag: "CODED" },
+  { name: "JP 3-09.3 — Close Air Support", tag: "CODED" },
+  { name: "AFDP 3-60 — Targeting", tag: "CODED" },
+  { name: "ATP 2-01.3 — Intelligence Preparation of the Battlefield", tag: "CODED" },
+  { name: "FM 4-30 — Ordnance Operations", tag: "CODED" },
+  { name: "FM 3-14 — Army Space Operations", tag: "CODED" },
+  { name: "25ID O&FF Fires Analysis — OAKOC Terrain Product", tag: "CODED" },
 ];
 
 const ts = () => new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -142,6 +149,9 @@ export default function WarRoom() {
   const [exporting, setExporting] = useState(false);
   const [exportText, setExportText] = useState("");
   const [showExport, setShowExport] = useState(false);
+
+  // Map toggle
+  const [showMap, setShowMap] = useState(false);
 
   const messagesEndRef = useRef(null);
 
@@ -536,7 +546,10 @@ export default function WarRoom() {
       <ExportModal />
       <div style={S.hdr}>
         <div style={S.hdrL}><span style={S.hdrLogo}>⚔ 25 ID WAR ROOM</span><span style={S.hdrM}>ROOM: {roomId}</span></div>
-        <div style={S.hdrR}>{participants.map((p) => <span key={p.sessionId} style={S.pt}><span style={S.dot} /> {p.callsign}</span>)}</div>
+        <div style={S.hdrR}>
+          <button style={{ background: showMap ? "#D4A843" : "#1A2332", color: showMap ? "#0A0E14" : "#D4A843", border: "1px solid #D4A84366", borderRadius: 3, padding: "3px 10px", fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: 1, transition: "all 0.15s" }} onClick={() => setShowMap(!showMap)}>{showMap ? "CHAT" : "MAP"}</button>
+          {participants.map((p) => <span key={p.sessionId} style={S.pt}><span style={S.dot} /> {p.callsign}</span>)}
+        </div>
       </div>
       <div style={S.body}>
         {/* SIDEBAR */}
@@ -548,29 +561,35 @@ export default function WarRoom() {
           <div style={{ flex: 1 }} />
         </div>
 
-        {/* MAIN CHAT */}
+        {/* MAIN PANEL — MAP or CHAT */}
         <div style={S.main}>
-          <div style={S.tb}>
-            <span style={S.ct}>{aStaff ? `${aStaff.icon} ${aStaff.title}` : channelList.find((c) => c.id === activeChannel)?.name}</span>
-            {aStaff && <span style={{ fontSize: 11, color: "#566A80", marginLeft: 12 }}>{aStaff.desc}</span>}
-          </div>
-          <div style={S.ma}>
-            {chMsgs.map((m) => (
-              <div key={m.id} style={S.msg(m.isHuman, m.senderColor)}>
-                <div style={S.av(m.senderColor)}>{m.isHuman ? "👤" : m.sender.slice(0, 2).toUpperCase()}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div><span style={{ fontSize: 11, fontWeight: 700, color: m.senderColor }}>{m.sender}</span><span style={{ fontSize: 10, color: "#566A80", marginLeft: 8 }}>{m.time}</span></div>
-                  <div style={S.mt}>{m.text}</div>
-                </div>
+          {showMap ? (
+            <OperationsMap />
+          ) : (
+            <>
+              <div style={S.tb}>
+                <span style={S.ct}>{aStaff ? `${aStaff.icon} ${aStaff.title}` : channelList.find((c) => c.id === activeChannel)?.name}</span>
+                {aStaff && <span style={{ fontSize: 11, color: "#566A80", marginLeft: 12 }}>{aStaff.desc}</span>}
               </div>
-            ))}
-            {isRunning && activeChannel === "cop" && <div style={{ padding: "8px 12px", color: "#D4A843", fontSize: 12, animation: "pulse 1.5s infinite" }}><Spinner /> 25 ID staff working...</div>}
-            <div ref={messagesEndRef} />
-          </div>
-          <div style={S.ib}>
-            <textarea style={S.inf} placeholder={`Message as ${callsign}... (Shift+Enter for newline)`} value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown} rows={1} />
-            <button style={S.btn("#4A9EE8", !inputText.trim() || isRunning)} disabled={!inputText.trim() || isRunning} onClick={sendMessage}>SEND</button>
-          </div>
+              <div style={S.ma}>
+                {chMsgs.map((m) => (
+                  <div key={m.id} style={S.msg(m.isHuman, m.senderColor)}>
+                    <div style={S.av(m.senderColor)}>{m.isHuman ? "👤" : m.sender.slice(0, 2).toUpperCase()}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div><span style={{ fontSize: 11, fontWeight: 700, color: m.senderColor }}>{m.sender}</span><span style={{ fontSize: 10, color: "#566A80", marginLeft: 8 }}>{m.time}</span></div>
+                      <div style={S.mt}>{m.text}</div>
+                    </div>
+                  </div>
+                ))}
+                {isRunning && activeChannel === "cop" && <div style={{ padding: "8px 12px", color: "#D4A843", fontSize: 12, animation: "pulse 1.5s infinite" }}><Spinner /> 25 ID staff working...</div>}
+                <div ref={messagesEndRef} />
+              </div>
+              <div style={S.ib}>
+                <textarea style={S.inf} placeholder={`Message as ${callsign}... (Shift+Enter for newline)`} value={inputText} onChange={(e) => setInputText(e.target.value)} onKeyDown={handleKeyDown} rows={1} />
+                <button style={S.btn("#4A9EE8", !inputText.trim() || isRunning)} disabled={!inputText.trim() || isRunning} onClick={sendMessage}>SEND</button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* RIGHT PANEL */}
