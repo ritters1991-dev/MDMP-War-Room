@@ -515,11 +515,11 @@ export default function WarRoom() {
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {FIXED_ROOMS.map((room) => (
           <button key={room.id} disabled={!callsign} onClick={() => { joinRoom(room.id, room.id); setPhase("lobby"); }}
-            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#0A0E14", border: `1px solid ${room.color}44`, borderRadius: 6, cursor: callsign ? "pointer" : "default", opacity: callsign ? 1 : 0.5, textAlign: "left", fontFamily: "inherit", transition: "all 0.15s" }}>
-            <span style={{ fontSize: 20, color: room.color, width: 28, textAlign: "center", flexShrink: 0 }}>{room.icon}</span>
+            style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 18px", background: `${room.color}18`, border: `2px solid ${room.color}`, borderRadius: 8, cursor: callsign ? "pointer" : "default", opacity: callsign ? 1 : 0.4, textAlign: "left", fontFamily: "inherit", transition: "all 0.15s", boxShadow: `0 0 12px ${room.color}22` }}>
+            <span style={{ fontSize: 24, color: room.color, width: 32, textAlign: "center", flexShrink: 0, filter: "drop-shadow(0 0 4px currentColor)" }}>{room.icon}</span>
             <div>
-              <div style={{ fontSize: 12, fontWeight: 700, color: room.color, letterSpacing: 0.5 }}>{room.name}</div>
-              <div style={{ fontSize: 10, color: "#7A8A9E", marginTop: 2 }}>{room.desc}</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: room.color, letterSpacing: 0.5 }}>{room.name}</div>
+              <div style={{ fontSize: 10, color: "#B8C4D4", marginTop: 3 }}>{room.desc}</div>
             </div>
           </button>
         ))}
