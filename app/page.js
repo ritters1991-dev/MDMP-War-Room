@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { db, ref, push, onValue, set, get, remove, off, onDisconnect } from "../lib/firebase";
-import { STAFF, MDMP_STEPS, buildSystemPrompt } from "../lib/mdmp";
+import { STAFF, MDMP_STEPS, buildSystemPrompt, ROOM_TYPES } from "../lib/mdmp";
 import OperationsMap from "./OperationsMap";
 
 // Built-in documents — hardcoded into every agent's system prompt (no upload needed)
@@ -61,9 +61,9 @@ const readFileAsText = (file) => new Promise((res, rej) => {
   r.readAsText(file);
 });
 
-async function callAgent(roleId, userPrompt, { systemOverride, model, maxTokens, retries = 2 } = {}) {
+async function callAgent(roleId, userPrompt, { systemOverride, model, maxTokens, retries = 2, roomType: rt, crossRoomContext } = {}) {
   const role = STAFF[roleId];
-  const sysPrompt = systemOverride || (role ? buildSystemPrompt(role) : "You are a military staff coordinator.");
+  const sysPrompt = systemOverride || (role ? buildSystemPrompt(role, null, rt, crossRoomContext) : "You are a military staff coordinator.");
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const body = { systemPrompt: sysPrompt, userPrompt };
@@ -117,8 +117,8 @@ export default function WarRoom() {
   const [phase, setPhase] = useState("setup");
   const [callsign, setCallsign] = useState("");
   const [roomId, setRoomId] = useState("");
-  const [joinRoomId, setJoinRoomId] = useState("");
-  const [savedSession, setSavedSession] = useState(null); // { roomId, callsign } from localStorage
+  const [roomType, setRoomType] = useState(null); // "OVERALL" | "COA1" | "COA2" | "REDCELL"
+  const [savedSession, setSavedSession] = useState(null); // { roomId, callsign, roomType } from localStorage
 
   const [library, setLibrary] = useState({ doctrine: {}, scenario: {} });
   const [docFiles, setDocFiles] = useState([]);
@@ -184,7 +184,7 @@ export default function WarRoom() {
       const raw = localStorage.getItem("mdmp_session");
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.roomId && parsed.callsign) setSavedSession(parsed);
+        if (parsed.roomId && parsed.callsign && parsed.roomType) setSavedSession(parsed);
       }
     } catch {}
   }, []);
@@ -248,22 +248,26 @@ export default function WarRoom() {
     else setSelectedScenarios(new Set(Object.keys(library.scenario)));
   };
 
-  const createRoom = useCallback(() => {
-    const id = Math.random().toString(36).slice(2, 8).toUpperCase();
-    setRoomId(id);
-    set(ref(db, `rooms/${id}`), { created: Date.now(), status: "active" });
-    // Persist session for rejoin
-    try { localStorage.setItem("mdmp_session", JSON.stringify({ roomId: id, callsign })); } catch {}
-    return id;
-  }, [callsign]);
+  // Ensure all 4 persistent rooms exist in Firebase
+  const ensureRoomsExist = useCallback(async () => {
+    for (const room of Object.values(ROOM_TYPES)) {
+      const roomRef = ref(db, `rooms/${room.id}`);
+      const snap = await get(roomRef);
+      if (!snap.exists()) {
+        await set(roomRef, { created: Date.now(), status: "active", roomType: room.id });
+      }
+    }
+  }, []);
+  useEffect(() => { ensureRoomsExist(); }, [ensureRoomsExist]);
 
-  const joinRoom = useCallback((id) => {
+  const joinRoom = useCallback((id, type) => {
     // Clean up any previous listeners before attaching new ones (prevents leak on rejoin)
     if (firebaseCleanupRef.current) firebaseCleanupRef.current();
 
     setRoomId(id);
+    setRoomType(type);
     // Persist session for rejoin
-    try { localStorage.setItem("mdmp_session", JSON.stringify({ roomId: id, callsign })); } catch {}
+    try { localStorage.setItem("mdmp_session", JSON.stringify({ roomId: id, callsign, roomType: type })); } catch {}
     const presRef = ref(db, `rooms/${id}/participants/${sessionId}`);
     set(presRef, { callsign, joinedAt: Date.now(), lastSeen: Date.now() });
     const hb = setInterval(() => set(ref(db, `rooms/${id}/participants/${sessionId}/lastSeen`), Date.now()), 10000);
@@ -322,6 +326,38 @@ export default function WarRoom() {
     }).catch((err) => console.warn("KB write warning:", err.message?.slice(0, 100)));
   }, [roomId]);
 
+  // Cross-room context for OVERALL room — reads recent activity from COA1, COA2, REDCELL
+  const fetchCrossRoomContext = useCallback(async () => {
+    if (roomType !== "OVERALL") return "";
+    const otherRooms = ["COA1", "COA2", "REDCELL"];
+    let context = "";
+    for (const rid of otherRooms) {
+      try {
+        const rc = ROOM_TYPES[rid];
+        const msgSnap = await get(ref(db, `rooms/${rid}/messages`));
+        const msgVal = msgSnap.val();
+        if (!msgVal) { context += `\n── ${rc.name} ──\n(No activity yet)\n`; continue; }
+        const msgs = Object.values(msgVal).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 15).reverse();
+        context += `\n── ${rc.name} (Recent Activity) ──\n`;
+        msgs.forEach(m => {
+          const t = m.text?.length > 300 ? m.text.slice(0, 300) + "..." : m.text;
+          context += `[${m.time}] ${m.sender}: ${t}\n`;
+        });
+        const kbSnap = await get(ref(db, `rooms/${rid}/knowledge`));
+        const kbVal = kbSnap.val();
+        if (kbVal) {
+          context += `Knowledge Base:\n`;
+          Object.entries(kbVal).forEach(([, agents]) => {
+            Object.entries(agents).forEach(([, data]) => {
+              if (data.summary) context += `  ${data.agentShort}: ${data.summary.slice(0, 200)}...\n`;
+            });
+          });
+        }
+      } catch (err) { context += `\n── ${ROOM_TYPES[rid]?.name} ──\n(Error: ${err.message})\n`; }
+    }
+    return context;
+  }, [roomType]);
+
   const handleUpload = useCallback(async (e, type) => {
     const files = Array.from(e.target.files);
     const existing = type === "doctrine" ? library.doctrine : library.scenario;
@@ -376,7 +412,7 @@ export default function WarRoom() {
     // Run agents ONE AT A TIME — 1500 token cap + 2s gaps to stay within Tier 1 output token limit (8K/min)
     for (const a of allAgents) {
       const agent = STAFF[a];
-      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise — focus on actionable items, under 800 words.`, { maxTokens: 1500 });
+      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise — focus on actionable items, under 800 words.`, { maxTokens: 1500, roomType });
       results[a] = result;
       postMsg(a, agent.title, agent.color, result, true);
       postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 400 ? result.slice(0, 400) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
@@ -392,7 +428,7 @@ export default function WarRoom() {
       .join("\n\n");
     let xo;
     try {
-      xo = await callAgent("xo", `XO: Synthesize Step ${step.num}.\n\n${xoInputs}\n\nBLUF, key issues, gaps, risks. Under 400 words.`, { maxTokens: 800, retries: 1 });
+      xo = await callAgent("xo", `XO: Synthesize Step ${step.num}.\n\n${xoInputs}\n\nBLUF, key issues, gaps, risks. Under 400 words.`, { maxTokens: 800, retries: 1, roomType });
     } catch (e) { xo = null; }
     // Graceful fallback if XO fails (timeout, rate limit, etc.)
     if (xo && !xo.startsWith("⚠")) {
@@ -416,20 +452,23 @@ export default function WarRoom() {
     const text = inputText.trim(); if (!text || isRunning) return; setInputText("");
     const sn = callsign || "OPERATOR";
     postMsg(activeChannel, sn, "#4A9EE8", text, false);
+    // Fetch cross-room context for OVERALL room
+    let crossCtx = "";
+    if (roomType === "OVERALL") { try { crossCtx = await fetchCrossRoomContext(); } catch {} }
     if (STAFF[activeChannel]) {
       const agent = STAFF[activeChannel];
       postMsg(activeChannel, agent.title, agent.color, "Processing...", true);
       const recent = (messages[activeChannel] || []).slice(-20).map((m) => `${m.sender}: ${m.text}`).join("\n\n");
-      const resp = await callAgent(activeChannel, `CONVERSATION:\n${recent}\n\nDOCS:\n${getDocContext()}\n\nPREV OUTPUTS:\n${getPrevOutputs()}\n\n${sn} says: "${text}"\n\nRespond as ${agent.title}. If this is a request for revision, clearly mark changes as "REVISED per guidance." Be specific, use doctrine.`);
+      const resp = await callAgent(activeChannel, `CONVERSATION:\n${recent}\n\nDOCS:\n${getDocContext()}\n\nPREV OUTPUTS:\n${getPrevOutputs()}\n\n${sn} says: "${text}"\n\nRespond as ${agent.title}. If this is a request for revision, clearly mark changes as "REVISED per guidance." Be specific, use doctrine.`, { roomType, crossRoomContext: crossCtx });
       postMsg(activeChannel, agent.title, agent.color, resp, true);
     } else if (activeChannel === "cop") {
-      const resp = await callAgent("xo", `CDR (${sn}) posted to COP: "${text}"\n\nRecent COP:\n${(messages.cop || []).slice(-10).map((m) => `${m.sender}: ${m.text.slice(0, 200)}`).join("\n")}\n\nDocs:\n${getDocContext()}\n\nPrev:\n${getPrevOutputs()}\n\nAs 25 ID XO, respond.`);
+      const resp = await callAgent("xo", `CDR (${sn}) posted to COP: "${text}"\n\nRecent COP:\n${(messages.cop || []).slice(-10).map((m) => `${m.sender}: ${m.text.slice(0, 200)}`).join("\n")}\n\nDocs:\n${getDocContext()}\n\nPrev:\n${getPrevOutputs()}\n\nAs 25 ID XO, respond.`, { roomType, crossRoomContext: crossCtx });
       postMsg("cop", "25 ID XO", "#D4A843", resp, true);
     } else if (activeChannel === "cdr") {
       postMsg("cdr", "SYSTEM", "#FFD700", "CDR guidance recorded. Staff notified.", true);
       postMsg("cop", "SYSTEM", "#D4A843", `⚡ CDR GUIDANCE: "${text.slice(0, 300)}"`, true);
     }
-  }, [inputText, activeChannel, callsign, messages, isRunning, getDocContext, getPrevOutputs, postMsg]);
+  }, [inputText, activeChannel, callsign, messages, isRunning, getDocContext, getPrevOutputs, postMsg, roomType, fetchCrossRoomContext]);
 
   // Export brief — streaming response (same pattern as callAgent)
   const exportBrief = useCallback(async (type) => {
@@ -449,35 +488,36 @@ export default function WarRoom() {
 
   // ═════════ SETUP ═════════
   if (phase === "setup") {
-    return (<div style={S.root}><div style={S.over}><div style={S.box}>
+    const FIXED_ROOMS = Object.values(ROOM_TYPES);
+    return (<div style={S.root}><div style={S.over}><div style={{ ...S.box, maxWidth: 520 }}>
       <div style={S.logo}>⚔ 25 ID MDMP WAR ROOM</div>
       <div style={S.sub}>25th Infantry Division "Tropic Lightning" — Virtual Staff Platform</div>
-      {savedSession && (
+      {savedSession && savedSession.roomType && (
         <div style={{ padding: "12px", background: "rgba(74, 158, 232, 0.08)", borderRadius: 6, border: "1px solid rgba(74, 158, 232, 0.3)", marginBottom: 16 }}>
           <div style={{ fontSize: 10, color: "#4A9EE8", fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>PREVIOUS SESSION FOUND</div>
-          <div style={{ fontSize: 12, color: "#C0CCD8", marginBottom: 8 }}>Room <span style={{ color: "#D4A843", fontWeight: 700 }}>{savedSession.roomId}</span> as <span style={{ color: "#4A9EE8", fontWeight: 700 }}>{savedSession.callsign}</span></div>
+          <div style={{ fontSize: 12, color: "#C0CCD8", marginBottom: 8 }}>Room <span style={{ color: ROOM_TYPES[savedSession.roomType]?.color || "#D4A843", fontWeight: 700 }}>{ROOM_TYPES[savedSession.roomType]?.shortName || savedSession.roomId}</span> as <span style={{ color: "#4A9EE8", fontWeight: 700 }}>{savedSession.callsign}</span></div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button style={{ ...S.btn("#4A9EE8", false), flex: 1 }} onClick={() => { setCallsign(savedSession.callsign); joinRoom(savedSession.roomId); setPhase("lobby"); }}>RESUME SESSION</button>
+            <button style={{ ...S.btn("#4A9EE8", false), flex: 1 }} onClick={() => { setCallsign(savedSession.callsign); joinRoom(savedSession.roomId, savedSession.roomType); setPhase("lobby"); }}>RESUME SESSION</button>
             <button style={{ flex: 0, padding: "8px 12px", background: "transparent", border: "1px solid #2A3A4A", borderRadius: 4, color: "#566A80", fontSize: 10, cursor: "pointer" }} onClick={() => { try { localStorage.removeItem("mdmp_session"); } catch {} setSavedSession(null); }}>DISMISS</button>
           </div>
         </div>
       )}
       <label style={S.label}>YOUR CALLSIGN</label>
       <input style={S.ti} placeholder="e.g. LIGHTNING 6, MAJ Smith" value={callsign} onChange={(e) => setCallsign(e.target.value)} />
-      {(Object.keys(library.doctrine).length > 0 || Object.keys(library.scenario).length > 0) && (
-        <div style={{ padding: "8px 12px", background: "#0A0E14", borderRadius: 4, border: "1px solid #1E2A3A", marginBottom: 12, fontSize: 11, color: "#7A8A9E" }}>
-          📚 Library: <span style={{ color: "#4A9EE8" }}>{Object.keys(library.doctrine).length} doctrine</span> + <span style={{ color: "#E05555" }}>{Object.keys(library.scenario).length} scenario</span>
-        </div>
-      )}
-      <div style={{ display: "flex", gap: 8 }}>
-        <button style={{ ...S.btn("#D4A843", !callsign), flex: 1 }} disabled={!callsign} onClick={() => { const id = createRoom(); joinRoom(id); setPhase("lobby"); }}>CREATE NEW ROOM</button>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#566A80", textTransform: "uppercase", marginBottom: 8, marginTop: 4 }}>SELECT ROOM</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {FIXED_ROOMS.map((room) => (
+          <button key={room.id} disabled={!callsign} onClick={() => { joinRoom(room.id, room.id); setPhase("lobby"); }}
+            style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", background: "#0A0E14", border: `1px solid ${room.color}44`, borderRadius: 6, cursor: callsign ? "pointer" : "default", opacity: callsign ? 1 : 0.5, textAlign: "left", fontFamily: "inherit", transition: "all 0.15s" }}>
+            <span style={{ fontSize: 20, color: room.color, width: 28, textAlign: "center", flexShrink: 0 }}>{room.icon}</span>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: room.color, letterSpacing: 0.5 }}>{room.name}</div>
+              <div style={{ fontSize: 10, color: "#7A8A9E", marginTop: 2 }}>{room.desc}</div>
+            </div>
+          </button>
+        ))}
       </div>
-      <div style={S.div}><span style={{ background: "#131920", padding: "0 12px", color: "#566A80", fontSize: 10 }}>OR JOIN EXISTING</span></div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input style={{ ...S.ti, flex: 1, marginBottom: 0 }} placeholder="Room code" value={joinRoomId} onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())} />
-        <button style={S.btn("#4A9EE8", !callsign || !joinRoomId)} disabled={!callsign || !joinRoomId} onClick={() => { setRoomId(joinRoomId); joinRoom(joinRoomId); setPhase("lobby"); }}>JOIN</button>
-      </div>
-      <button style={{ ...S.btn("#2A3A4A", !callsign), width: "100%", marginTop: 16, color: "#7A8A9E", background: "#131920", border: "1px solid #1E2A3A" }} disabled={!callsign} onClick={() => setPhase("library")}>📚 MANAGE DOCUMENT LIBRARY</button>
+      <button style={{ ...S.btn("#2A3A4A", !callsign), width: "100%", marginTop: 16, color: "#7A8A9E", background: "#131920", border: "1px solid #1E2A3A" }} disabled={!callsign} onClick={() => setPhase("library")}>MANAGE DOCUMENT LIBRARY</button>
     </div></div></div>);
   }
 
@@ -513,14 +553,15 @@ export default function WarRoom() {
 
   // ═════════ LOBBY ═════════
   if (phase === "lobby") {
+    const rc = ROOM_TYPES[roomType] || {};
     return (<div style={S.root}><div style={S.over}><div style={{ ...S.box, maxWidth: 600 }}>
-      <div style={S.logo}>⚔ 25 ID WAR ROOM: {roomId}</div>
-      <div style={S.sub}>Share code with team</div>
-      <div style={S.rcb}><span style={S.rc}>{roomId}</span><button style={{ ...S.btn("#2A3A4A", false), padding: "6px 12px", fontSize: 10 }} onClick={() => navigator.clipboard?.writeText(roomId)}>COPY</button></div>
-      <div style={{ margin: "12px 0 8px", display: "flex", gap: 6, flexWrap: "wrap" }}>{participants.map((p) => <span key={p.sessionId} style={S.pt}><span style={S.dot} /> {p.callsign}</span>)}</div>
+      <div style={S.logo}>⚔ {rc.icon} {rc.shortName || roomId}</div>
+      <div style={{ ...S.sub, color: rc.color || "#566A80" }}>{rc.name || roomId}</div>
+      <div style={{ padding: "8px 12px", background: "#0A0E14", borderRadius: 4, border: `1px solid ${rc.color || "#1E2A3A"}33`, marginBottom: 12, fontSize: 11, color: "#7A8A9E" }}>{rc.desc}</div>
+      <div style={{ margin: "8px 0 8px", display: "flex", gap: 6, flexWrap: "wrap" }}>{participants.map((p) => <span key={p.sessionId} style={S.pt}><span style={S.dot} /> {p.callsign}</span>)}</div>
 
       {/* Built-in documents — native to the staff */}
-      <div style={{ margin: "16px 0 8px", padding: "12px", background: "#0A0E14", borderRadius: 6, border: "1px solid #1E2A3A" }}>
+      <div style={{ margin: "12px 0 8px", padding: "12px", background: "#0A0E14", borderRadius: 6, border: "1px solid #1E2A3A" }}>
         <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#3EAF5C", textTransform: "uppercase", marginBottom: 8 }}>NATIVE STAFF DOCUMENTS</div>
         <div style={{ fontSize: 10, color: "#566A80", marginBottom: 10 }}>Scenario and doctrine are coded into the virtual staff. No upload required.</div>
         <div style={{ marginBottom: 6 }}>
@@ -535,18 +576,18 @@ export default function WarRoom() {
 
       <div style={{ fontSize: 10, color: "#566A80", textAlign: "center", margin: "8px 0" }}>Additional documents (SIGACTs, SITREPs, etc.) can be uploaded during the exercise.</div>
 
-      <button style={{ ...S.btn("#D4A843", false), width: "100%", marginTop: 12, padding: 14 }}
+      <button style={{ ...S.btn(rc.color || "#D4A843", false), width: "100%", marginTop: 12, padding: 14 }}
         onClick={() => {
           try {
             setPhase("warroom");
             setTimeout(() => {
-              postMsg("cop", "SYSTEM", "#D4A843", `25th Infantry Division War Room ACTIVE\nRoom: ${roomId}\nScenario: W500 — Operation Pacific Pugilist (CODED)\nDoctrine: ${BUILT_IN_DOCTRINE.length} publications (CODED)\n\n▸ RUN STEP 1 to begin MDMP\n▸ Chat any staff section to interact\n▸ Upload SIGACTs/SITREPs during exercise to update the staff`, true);
+              postMsg("cop", "SYSTEM", rc.color || "#D4A843", `25th Infantry Division War Room ACTIVE\nRoom: ${rc.icon} ${rc.name}\nScenario: W500 — Operation Pacific Pugilist (CODED)\nDoctrine: ${BUILT_IN_DOCTRINE.length} publications (CODED)\n\n${roomType === "REDCELL" ? "▸ RED CELL — Think as the enemy. Challenge friendly COAs.\n▸ Chat any section for enemy WfF analysis" : roomType === "OVERALL" ? "▸ CDR Room — Full staff with cross-room awareness\n▸ Ask about COA 1, COA 2, or Red Cell work\n▸ Chat any staff section to interact" : `▸ ${rc.shortName} — ${rc.desc}\n▸ Chat any staff section for COA-specific analysis`}\n▸ Upload SIGACTs/SITREPs during exercise to update the staff`, true);
             }, 500);
           } catch (err) {
             console.error("Enter war room error:", err);
             setPhase("warroom");
           }
-        }}>ENTER WAR ROOM →</button>
+        }}>ENTER {rc.shortName || "WAR ROOM"} →</button>
     </div></div></div>);
   }
 
@@ -577,7 +618,7 @@ export default function WarRoom() {
     <div style={S.root}>
       <ExportModal />
       <div style={S.hdr}>
-        <div style={S.hdrL}><span style={S.hdrLogo}>⚔ 25 ID WAR ROOM</span><span style={S.hdrM}>ROOM: {roomId}</span></div>
+        <div style={S.hdrL}><span style={S.hdrLogo}>⚔ 25 ID WAR ROOM</span><span style={{ ...S.hdrM, color: ROOM_TYPES[roomType]?.color || "#566A80" }}>{ROOM_TYPES[roomType]?.icon} {ROOM_TYPES[roomType]?.shortName || roomId}</span></div>
         <div style={S.hdrR}>
           <button style={{ background: showMap ? "#D4A843" : "#1A2332", color: showMap ? "#0A0E14" : "#D4A843", border: "1px solid #D4A84366", borderRadius: 3, padding: "3px 10px", fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", letterSpacing: 1, transition: "all 0.15s" }} onClick={() => setShowMap(!showMap)}>{showMap ? "CHAT" : "MAP"}</button>
           {participants.map((p) => <span key={p.sessionId} style={S.pt}><span style={S.dot} /> {p.callsign}</span>)}
