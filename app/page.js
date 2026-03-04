@@ -140,6 +140,9 @@ export default function WarRoom() {
   const [selectedDocs, setSelectedDocs] = useState(new Set());
   const [selectedScenarios, setSelectedScenarios] = useState(new Set());
 
+  // Firebase listener cleanup — prevents listener leak when multiple users join
+  const firebaseCleanupRef = useRef(null);
+
   // Collapsible panels
   const [scenarioOpen, setScenarioOpen] = useState(true);
   const [doctrineOpen, setDoctrineOpen] = useState(false);
@@ -168,6 +171,11 @@ export default function WarRoom() {
   ];
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages[activeChannel]?.length]);
+
+  // Clean up Firebase listeners on unmount (tab close, navigation)
+  useEffect(() => {
+    return () => { if (firebaseCleanupRef.current) firebaseCleanupRef.current(); };
+  }, []);
 
   // Check for saved session on mount
   useEffect(() => {
@@ -249,6 +257,9 @@ export default function WarRoom() {
   }, [callsign]);
 
   const joinRoom = useCallback((id) => {
+    // Clean up any previous listeners before attaching new ones (prevents leak on rejoin)
+    if (firebaseCleanupRef.current) firebaseCleanupRef.current();
+
     setRoomId(id);
     // Persist session for rejoin
     try { localStorage.setItem("mdmp_session", JSON.stringify({ roomId: id, callsign })); } catch {}
@@ -256,13 +267,27 @@ export default function WarRoom() {
     set(presRef, { callsign, joinedAt: Date.now(), lastSeen: Date.now() });
     const hb = setInterval(() => set(ref(db, `rooms/${id}/participants/${sessionId}/lastSeen`), Date.now()), 10000);
     onDisconnect(presRef).remove();
-    onValue(ref(db, `rooms/${id}/participants`), (s) => { const v = s.val(); if (v) setParticipants(Object.entries(v).filter(([_, p]) => Date.now() - p.lastSeen < 60000).map(([sid, p]) => ({ ...p, sessionId: sid }))); });
-    onValue(ref(db, `rooms/${id}/messages`), (s) => { const v = s.val(); if (!v) return; const g = {}; Object.values(v).forEach((m) => { if (!g[m.channel]) g[m.channel] = []; g[m.channel].push(m); }); Object.keys(g).forEach((c) => g[c].sort((a, b) => a.timestamp - b.timestamp)); setMessages(g); });
-    onValue(ref(db, `rooms/${id}/mdmpState`), (s) => { const v = s.val(); if (v) { if (v.currentStep !== undefined) setCurrentStep(v.currentStep); if (v.isRunning !== undefined) setIsRunning(v.isRunning); if (v.completedSteps) setCompletedSteps(new Set(v.completedSteps)); if (v.stepOutputs) setStepOutputs(v.stepOutputs); } });
-    onValue(ref(db, `rooms/${id}/documents`), (s) => { const v = s.val(); if (v) { if (v.docFiles) setDocFiles(v.docFiles); if (v.scenarioFiles) setScenarioFiles(v.scenarioFiles); } });
+
+    // Attach listeners and store their unsubscribe functions
+    const participantsRef = ref(db, `rooms/${id}/participants`);
+    const messagesRef = ref(db, `rooms/${id}/messages`);
+    const mdmpStateRef = ref(db, `rooms/${id}/mdmpState`);
+    const documentsRef = ref(db, `rooms/${id}/documents`);
+    const knowledgeRef = ref(db, `rooms/${id}/knowledge`);
+
+    const unsub1 = onValue(participantsRef, (s) => { const v = s.val(); if (v) setParticipants(Object.entries(v).filter(([_, p]) => Date.now() - p.lastSeen < 60000).map(([sid, p]) => ({ ...p, sessionId: sid }))); });
+    const unsub2 = onValue(messagesRef, (s) => { const v = s.val(); if (!v) return; const g = {}; Object.values(v).forEach((m) => { if (!g[m.channel]) g[m.channel] = []; g[m.channel].push(m); }); Object.keys(g).forEach((c) => g[c].sort((a, b) => a.timestamp - b.timestamp)); setMessages(g); });
+    const unsub3 = onValue(mdmpStateRef, (s) => { const v = s.val(); if (v) { if (v.currentStep !== undefined) setCurrentStep(v.currentStep); if (v.isRunning !== undefined) setIsRunning(v.isRunning); if (v.completedSteps) setCompletedSteps(new Set(v.completedSteps)); if (v.stepOutputs) setStepOutputs(v.stepOutputs); } });
+    const unsub4 = onValue(documentsRef, (s) => { const v = s.val(); if (v) { if (v.docFiles) setDocFiles(v.docFiles); if (v.scenarioFiles) setScenarioFiles(v.scenarioFiles); } });
     // Knowledge Base listener — syncs condensed outputs from all participants
-    onValue(ref(db, `rooms/${id}/knowledge`), (s) => { const v = s.val(); if (v) setKnowledgeBase(v); });
-    return () => clearInterval(hb);
+    const unsub5 = onValue(knowledgeRef, (s) => { const v = s.val(); if (v) setKnowledgeBase(v); });
+
+    // Store cleanup — detaches listeners only, does NOT delete any Firebase data
+    firebaseCleanupRef.current = () => {
+      clearInterval(hb);
+      unsub1(); unsub2(); unsub3(); unsub4(); unsub5();
+      firebaseCleanupRef.current = null;
+    };
   }, [callsign, sessionId]);
 
   const postMsg = useCallback((ch, sender, color, text, isAgent = false) => {
