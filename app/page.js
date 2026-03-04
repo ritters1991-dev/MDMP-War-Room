@@ -248,13 +248,20 @@ export default function WarRoom() {
     else setSelectedScenarios(new Set(Object.keys(library.scenario)));
   };
 
-  // Ensure all 4 persistent rooms exist in Firebase
+  // Ensure all 4 persistent rooms exist in Firebase with Steps 1-2 pre-completed
+  // (All MA products are hardcoded into agents — no need to re-run Steps 1-2)
   const ensureRoomsExist = useCallback(async () => {
     for (const room of Object.values(ROOM_TYPES)) {
       const roomRef = ref(db, `rooms/${room.id}`);
       const snap = await get(roomRef);
       if (!snap.exists()) {
         await set(roomRef, { created: Date.now(), status: "active", roomType: room.id });
+      }
+      // Pre-populate MDMP state: Steps 1 (Receipt) and 2 (MA) are complete — products are coded into agents
+      const stateRef = ref(db, `rooms/${room.id}/mdmpState`);
+      const stateSnap = await get(stateRef);
+      if (!stateSnap.exists() || !stateSnap.val()?.completedSteps?.length) {
+        await set(stateRef, { currentStep: 1, isRunning: false, completedSteps: [0, 1] });
       }
     }
   }, []);
