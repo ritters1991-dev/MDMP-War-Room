@@ -347,10 +347,10 @@ export default function WarRoom() {
         const msgSnap = await get(ref(db, `rooms/${rid}/messages`));
         const msgVal = msgSnap.val();
         if (!msgVal) { context += `\n── ${rc.name} ──\n(No activity yet)\n`; continue; }
-        const msgs = Object.values(msgVal).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 15).reverse();
+        const msgs = Object.values(msgVal).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)).slice(0, 30).reverse();
         context += `\n── ${rc.name} (Recent Activity) ──\n`;
         msgs.forEach(m => {
-          const t = m.text?.length > 300 ? m.text.slice(0, 300) + "..." : m.text;
+          const t = m.text?.length > 800 ? m.text.slice(0, 800) + "..." : m.text;
           context += `[${m.time}] ${m.sender}: ${t}\n`;
         });
         const kbSnap = await get(ref(db, `rooms/${rid}/knowledge`));
@@ -359,7 +359,7 @@ export default function WarRoom() {
           context += `Knowledge Base:\n`;
           Object.entries(kbVal).forEach(([, agents]) => {
             Object.entries(agents).forEach(([, data]) => {
-              if (data.summary) context += `  ${data.agentShort}: ${data.summary.slice(0, 200)}...\n`;
+              if (data.summary) context += `  ${data.agentShort}: ${data.summary.slice(0, 500)}...\n`;
             });
           });
         }
