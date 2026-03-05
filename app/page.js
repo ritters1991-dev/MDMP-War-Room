@@ -34,6 +34,7 @@ const BUILT_IN_DOCTRINE = [
   { name: "FM 90-13 / ATP 3-90.4 — Combined Arms Gap Crossing", tag: "CODED" },
   { name: "ATP 3-34.22 / FM 3-34 — Engineer Operations", tag: "CODED" },
   { name: "25ID Approved MA Brief — Human Staff Products", tag: "CODED" },
+  { name: "COA 1 Products — Scheme of Maneuver, Fires, Protection, Sync Matrix", tag: "CODED" },
 ];
 
 const ts = () => new Date().toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
