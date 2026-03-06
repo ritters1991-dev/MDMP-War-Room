@@ -337,9 +337,20 @@ export default function WarRoom() {
   }, [roomId]);
 
   // Cross-room context for OVERALL room — reads recent activity from COA1, COA2, REDCELL
+  // Cross-room awareness: each room pulls intel from related rooms
+  // OVERALL → sees COA1, COA2, REDCELL (full picture for CDR)
+  // COA1    → sees REDCELL (enemy actions inform blue planning)
+  // COA2    → sees REDCELL (enemy actions inform blue planning)
+  // REDCELL → sees COA1, COA2 (enemy reacts to blue actions)
   const fetchCrossRoomContext = useCallback(async () => {
-    if (roomType !== "OVERALL") return "";
-    const otherRooms = ["COA1", "COA2", "REDCELL"];
+    const crossRoomMap = {
+      OVERALL: ["COA1", "COA2", "REDCELL"],
+      COA1: ["REDCELL"],
+      COA2: ["REDCELL"],
+      REDCELL: ["COA1", "COA2"],
+    };
+    const otherRooms = crossRoomMap[roomType];
+    if (!otherRooms) return "";
     let context = "";
     for (const rid of otherRooms) {
       try {
@@ -462,9 +473,9 @@ export default function WarRoom() {
     const text = inputText.trim(); if (!text || isRunning) return; setInputText("");
     const sn = callsign || "OPERATOR";
     postMsg(activeChannel, sn, "#4A9EE8", text, false);
-    // Fetch cross-room context for OVERALL room
+    // Fetch cross-room context (all rooms pull intel from related rooms)
     let crossCtx = "";
-    if (roomType === "OVERALL") { try { crossCtx = await fetchCrossRoomContext(); } catch {} }
+    try { crossCtx = await fetchCrossRoomContext(); } catch {}
     if (STAFF[activeChannel]) {
       const agent = STAFF[activeChannel];
       postMsg(activeChannel, agent.title, agent.color, "Processing...", true);
