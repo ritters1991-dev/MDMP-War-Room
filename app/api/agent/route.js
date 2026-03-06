@@ -3,7 +3,11 @@ import { NextResponse } from "next/server";
 // Edge runtime + streaming = no timeout (streams can run for minutes)
 export const runtime = "edge";
 
-const MAX_PROMPT_CHARS = 180000;
+// Claude Sonnet 4 context = 200K tokens (~800K chars). System prompt must fit ALL
+// hardcoded data: scenario, doctrine, COA 1/2 products, wargaming package.
+// mdmp.js is ~220K chars — system prompt needs room for all of it.
+const MAX_SYSTEM_CHARS = 500000;
+const MAX_USER_CHARS = 200000;
 
 function truncatePrompt(text, maxChars) {
   if (text.length <= maxChars) return text;
@@ -20,8 +24,8 @@ export async function POST(req) {
       return NextResponse.json({ error: "ANTHROPIC_API_KEY not configured. Add it in Vercel Environment Variables." }, { status: 500 });
     }
 
-    const safeSystem = truncatePrompt(systemPrompt || "", MAX_PROMPT_CHARS / 3);
-    const safeUser = truncatePrompt(userPrompt || "", MAX_PROMPT_CHARS);
+    const safeSystem = truncatePrompt(systemPrompt || "", MAX_SYSTEM_CHARS);
+    const safeUser = truncatePrompt(userPrompt || "", MAX_USER_CHARS);
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -32,7 +36,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: model || "claude-sonnet-4-20250514",
-        max_tokens: maxTokens || 1500,
+        max_tokens: maxTokens || 4096,
         stream: true, // STREAMING — prevents Vercel Edge 25s timeout
         system: safeSystem,
         messages: [{ role: "user", content: safeUser }],
@@ -49,7 +53,7 @@ export async function POST(req) {
         return NextResponse.json({ error: "Rate limited. Wait a moment and try again." }, { status: 429 });
       }
       if (response.status === 401) {
-        return NextResponse.json({ error: `API key error (401): ${errText.slice(0, 300)}` }, { status: 401 });
+        return NextResponse.json({ error: "Invalid API key. Check ANTHROPIC_API_KEY in Vercel settings." }, { status: 401 });
       }
       if (response.status === 400 && errText.includes("credit")) {
         return NextResponse.json({ error: "Insufficient credits. Add funds at console.anthropic.com." }, { status: 400 });
