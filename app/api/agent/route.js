@@ -49,7 +49,7 @@ export async function POST(req) {
         return NextResponse.json({ error: "Rate limited. Wait a moment and try again." }, { status: 429 });
       }
       if (response.status === 401) {
-        return NextResponse.json({ error: "Invalid API key. Check ANTHROPIC_API_KEY in Vercel settings." }, { status: 401 });
+        return NextResponse.json({ error: `API key error (401): ${errText.slice(0, 300)}` }, { status: 401 });
       }
       if (response.status === 400 && errText.includes("credit")) {
         return NextResponse.json({ error: "Insufficient credits. Add funds at console.anthropic.com." }, { status: 400 });
