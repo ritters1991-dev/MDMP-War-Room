@@ -615,7 +615,7 @@ export default function WarRoom() {
 
   // ═════════ SETUP ═════════
   if (phase === "setup") {
-    const FIXED_ROOMS = Object.values(ROOM_TYPES);
+    const FIXED_ROOMS = Object.values(ROOM_TYPES).filter(r => r.id !== "REDCELL1" && r.id !== "REDCELL2");
     return (<div style={S.root}><div style={S.over}><div style={{ ...S.box, maxWidth: 520 }}>
       <div style={S.logo}>⚔ 25 ID MDMP WAR ROOM</div>
       <div style={S.sub}>25th Infantry Division "Tropic Lightning" — Virtual Staff Platform</div>
