@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { db, ref, push, onValue, set, get, remove, off, onDisconnect } from "../lib/firebase";
-import { STAFF, MDMP_STEPS, buildSystemPrompt, ROOM_TYPES } from "../lib/mdmp";
+import { STAFF, MDMP_STEPS, buildSystemPrompt, ROOM_TYPES, COA_EVAL_CRITERIA, COA_EVAL_CRITERIA_TEXT, TOTAL_CRITERIA_WEIGHT, buildCoaComparisonPrompt } from "../lib/mdmp";
 import OperationsMap from "./OperationsMap";
 
 // Built-in documents — hardcoded into every agent's system prompt (no upload needed)
@@ -146,6 +146,9 @@ export default function WarRoom() {
 
   // Firebase listener cleanup — prevents listener leak when multiple users join
   const firebaseCleanupRef = useRef(null);
+
+  // Stop execution flag — checked between agent calls in runStep
+  const stopRef = useRef(false);
 
   // Collapsible panels
   const [scenarioOpen, setScenarioOpen] = useState(true);
@@ -381,6 +384,75 @@ export default function WarRoom() {
     return context;
   }, [roomType]);
 
+  // ═══════ COA COMPARISON — DATA FUSION FROM ALL ROOMS ═══════
+  const gatherAllRoomWargamingData = useCallback(async () => {
+    const rooms = ["COA1", "COA2", "REDCELL1", "REDCELL2"];
+    let fused = "";
+    for (const rid of rooms) {
+      const rc = ROOM_TYPES[rid];
+      fused += `\n${"═".repeat(60)}\n  ${rc.name}\n${"═".repeat(60)}\n`;
+      try {
+        // Pull ALL messages (not just last 30) — we need full wargaming context
+        const msgSnap = await get(ref(db, `rooms/${rid}/messages`));
+        const msgVal = msgSnap.val();
+        if (!msgVal) { fused += "(No messages in this room)\n"; }
+        else {
+          const msgs = Object.values(msgVal).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          fused += `── Messages (${msgs.length} total) ──\n`;
+          // Include last 60 messages to capture wargaming depth (truncate individual messages at 1200 chars)
+          msgs.slice(-60).forEach(m => {
+            const t = m.text?.length > 1200 ? m.text.slice(0, 1200) + "..." : m.text;
+            fused += `[${m.time}] ${m.sender}: ${t}\n\n`;
+          });
+        }
+        // Pull knowledge base for this room (MDMP step outputs)
+        const kbSnap = await get(ref(db, `rooms/${rid}/knowledge`));
+        const kbVal = kbSnap.val();
+        if (kbVal) {
+          fused += `── Knowledge Base (MDMP Step Outputs) ──\n`;
+          Object.entries(kbVal).forEach(([stepKey, agents]) => {
+            Object.entries(agents).forEach(([agentKey, data]) => {
+              if (data.summary) {
+                const summary = data.summary.length > 2000 ? data.summary.slice(0, 2000) + "..." : data.summary;
+                fused += `  [Step ${data.stepNum || "?"}] ${data.agentShort || agentKey}: ${summary}\n\n`;
+              }
+            });
+          });
+        }
+      } catch (err) { fused += `(Error fetching: ${err.message})\n`; }
+    }
+    return fused;
+  }, []);
+
+  const runCoaComparison = useCallback(async () => {
+    if (isRunning) return;
+    setIsRunning(true);
+    postMsg("cop", "SYSTEM", "#D4A843", `${"═".repeat(40)}\n  COA COMPARISON — COMMANDER'S EVALUATION CRITERIA\n  WGX Speed (w:2) | Tempo (w:1) | Force Attrition (w:3) | Concentration (w:3)\n${"═".repeat(40)}\n\nFusing wargaming data from COA 1, COA 2, RED COA1, RED COA2...\nThis may take 30-60 seconds.`, true);
+    try {
+      // Step 1: Gather ALL wargaming data from all 4 rooms
+      const fusedData = await gatherAllRoomWargamingData();
+      postMsg("cop", "SYSTEM", "#D4A843", `✓ Data fused from all rooms. Running weighted comparison against CDR criteria...`, true);
+      // Step 2: Build the comparison prompt with criteria + fused data
+      const comparisonPrompt = buildCoaComparisonPrompt(fusedData);
+      // Step 3: Call XO with high token limit + criteria override in system prompt
+      const xoRole = STAFF["xo"];
+      const baseSystem = buildSystemPrompt(xoRole, null, "OVERALL");
+      const criteriaEnd = `\n\n${"═".repeat(60)}\n  CRITICAL — CDR'S COA EVALUATION CRITERIA (BINDING)\n${"═".repeat(60)}\n\nThe Commander has approved EXACTLY 4 evaluation criteria for COA comparison.\nDo NOT use generic FM 5-0 criteria (Mission Accomplishment, Flexibility, Simplicity, etc.).\nDo NOT invent additional criteria. Use ONLY these 4:\n\n${COA_EVAL_CRITERIA_TEXT}\n\nTotal Weight: ${TOTAL_CRITERIA_WEIGHT}. Score each COA 0.0 to 1.0 per criterion. Weighted = Score × Weight.\nVIOLATING THIS GUIDANCE INVALIDATES YOUR ASSESSMENT.\n`;
+      const result = await callAgent("xo", comparisonPrompt, { maxTokens: 4000, retries: 2, roomType: "OVERALL", systemOverride: baseSystem + criteriaEnd });
+      // Step 4: Post results
+      if (result && !result.startsWith("⚠")) {
+        postMsg("cop", "25 ID XO", "#D4A843", `${"═".repeat(40)}\n  COA COMPARISON — WEIGHTED DECISION MATRIX\n${"═".repeat(40)}\n\n${result}`, true);
+        // Save to knowledge base as step 5 output
+        saveToKnowledgeBase("coa_comparison", 5, "xo_comparison", `COA COMPARISON (CDR CRITERIA):\n${result}`);
+      } else {
+        postMsg("cop", "25 ID XO", "#D4A843", `⚠ COA COMPARISON FAILED\n\n${result || "Unknown error — try again in 30 seconds (API rate limit may apply)."}\n\nData was gathered successfully. The comparison agent failed. Try running again.`, true);
+      }
+    } catch (err) {
+      postMsg("cop", "SYSTEM", "#E05555", `⚠ COA COMPARISON ERROR: ${err.message}`, true);
+    }
+    setIsRunning(false);
+  }, [isRunning, postMsg, gatherAllRoomWargamingData, saveToKnowledgeBase]);
+
   const handleUpload = useCallback(async (e, type) => {
     const files = Array.from(e.target.files);
     const existing = type === "doctrine" ? library.doctrine : library.scenario;
@@ -427,21 +499,46 @@ export default function WarRoom() {
 
   const runStep = useCallback(async (si) => {
     const step = MDMP_STEPS[si]; if (!step) return;
+
+    // ═══ STEP 5 IN OVERALL ROOM — FUSED COA COMPARISON ═══
+    // When running Step 5 (COA Comparison) in the OVERALL room, intercept and use the
+    // fusion path: gather Step 5 outputs from COA1, COA2, REDCELL1, REDCELL2 rooms
+    // and produce the final weighted decision matrix against CDR evaluation criteria.
+    if (step.id === "coa_comparison" && roomType === "OVERALL") {
+      await runCoaComparison();
+      // Mark Step 5 as completed
+      const nC = new Set([...completedSteps, si]);
+      setCompletedSteps(nC); setCurrentStep(si);
+      syncMdmpState({ completedSteps: nC });
+      return;
+    }
+
+    stopRef.current = false;
     setIsRunning(true); setCurrentStep(si); syncMdmpState({ isRunning: true, currentStep: si });
     const docs = getDocContext(), prev = getPrevOutputs(), prompt = step.prompt(docs, prev);
+
+    // ═══ STEP 5 CRITERIA OVERRIDE ═══
+    // Append CDR's 4 evaluation criteria to the END of each agent's system prompt
+    // so the model can't default to generic FM 5-0 criteria (Mission Accomplishment, etc.)
+    const criteriaOverride = step.id === "coa_comparison" ? `\n\n${"═".repeat(60)}\n  CRITICAL — CDR'S COA EVALUATION CRITERIA (BINDING)\n${"═".repeat(60)}\n\nThe Commander has approved EXACTLY 4 evaluation criteria for COA comparison.\nDo NOT use generic FM 5-0 criteria (Mission Accomplishment, Flexibility, Simplicity, etc.).\nDo NOT invent additional criteria. Use ONLY these 4:\n\n${COA_EVAL_CRITERIA_TEXT}\n\nTotal Weight: ${TOTAL_CRITERIA_WEIGHT}. Score each COA 0.0 to 1.0 per criterion. Weighted = Score × Weight.\nVIOLATING THIS GUIDANCE INVALIDATES YOUR ASSESSMENT.\n` : "";
     postMsg("cop", "SYSTEM", "#D4A843", `═══════════════════════════════════════\n  25 ID STAFF: STEP ${step.num} — ${step.title.toUpperCase()}\n═══════════════════════════════════════\n\nLead: ${step.lead.map((l) => STAFF[l]?.short).join(", ")}\nSupporting: ${step.support.map((s) => STAFF[s]?.short).join(", ")}\nOutputs: ${step.outputs.join(", ")}\n\nAll sections working...`, true);
     const allAgents = [...step.lead, ...step.support], results = {};
     for (const a of allAgents) postMsg(a, STAFF[a].title, STAFF[a].color, `Roger. Working Step ${step.num}...`, true);
     // Run agents ONE AT A TIME — 1500 token cap + 2s gaps to stay within Tier 1 output token limit (8K/min)
     for (const a of allAgents) {
+      if (stopRef.current) { postMsg("cop", "SYSTEM", "#E05555", "⛔ Step execution HALTED by operator.", true); break; }
       const agent = STAFF[a];
-      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise — focus on actionable items, under 800 words.`, { maxTokens: 1500, roomType });
+      // For Step 5, append criteria override to system prompt so model can't default to generic FM 5-0 criteria
+      const sysOverride = criteriaOverride ? buildSystemPrompt(agent, null, roomType) + criteriaOverride : undefined;
+      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise — focus on actionable items, under 800 words.`, { maxTokens: 1500, roomType, systemOverride: sysOverride });
+      if (stopRef.current) { postMsg("cop", "SYSTEM", "#E05555", "⛔ Step execution HALTED by operator.", true); break; }
       results[a] = result;
       postMsg(a, agent.title, agent.color, result, true);
       postMsg("cop", agent.title, agent.color, `── ${agent.short} ──\n\n${result.length > 400 ? result.slice(0, 400) + "\n\n[... Full in " + agent.short + " channel ...]" : result}`, true);
       saveToKnowledgeBase(step.id, step.num, a, result); // Persist to KB
       await new Promise(r => setTimeout(r, 2000)); // 2s gap between agents
     }
+    if (stopRef.current) { setIsRunning(false); syncMdmpState({ isRunning: false }); return; }
     // XO synthesis — 15s delay for rate limit recovery, aggressive truncation, graceful fallback
     postMsg("cop", "SYSTEM", "#D4A843", "All sections reported. XO synthesizing...", true);
     await new Promise(r => setTimeout(r, 15000)); // 15s gap — lets output token rate limit window slide
@@ -469,12 +566,19 @@ export default function WarRoom() {
     const nO = { ...stepOutputs, [step.id]: results }, nC = new Set([...completedSteps, si]);
     setStepOutputs(nO); setCompletedSteps(nC); setIsRunning(false);
     syncMdmpState({ isRunning: false, completedSteps: nC, stepOutputs: nO });
-  }, [getDocContext, getPrevOutputs, postMsg, syncMdmpState, saveToKnowledgeBase, stepOutputs, completedSteps]);
+  }, [getDocContext, getPrevOutputs, postMsg, syncMdmpState, saveToKnowledgeBase, stepOutputs, completedSteps, roomType, runCoaComparison]);
 
   const sendMessage = useCallback(async () => {
     const text = inputText.trim(); if (!text || isRunning) return; setInputText("");
     const sn = callsign || "OPERATOR";
     postMsg(activeChannel, sn, "#4A9EE8", text, false);
+    // Detect COA comparison request in OVERALL room COP channel
+    const coaComparePattern = /\b(coa\s*compar|compare\s*coa|run\s*coa|decision\s*matrix|weighted\s*compar|eval\s*criteria)\b/i;
+    if (roomType === "OVERALL" && activeChannel === "cop" && coaComparePattern.test(text)) {
+      postMsg("cop", "25 ID XO", "#D4A843", "Roger. Initiating COA Comparison with CDR evaluation criteria. Fusing data from all rooms...", true);
+      await runCoaComparison();
+      return;
+    }
     // Fetch cross-room context (all rooms pull intel from related rooms)
     let crossCtx = "";
     try { crossCtx = await fetchCrossRoomContext(); } catch {}
@@ -491,7 +595,7 @@ export default function WarRoom() {
       postMsg("cdr", "SYSTEM", "#FFD700", "CDR guidance recorded. Staff notified.", true);
       postMsg("cop", "SYSTEM", "#D4A843", `⚡ CDR GUIDANCE: "${text.slice(0, 300)}"`, true);
     }
-  }, [inputText, activeChannel, callsign, messages, isRunning, getDocContext, getPrevOutputs, postMsg, roomType, fetchCrossRoomContext]);
+  }, [inputText, activeChannel, callsign, messages, isRunning, getDocContext, getPrevOutputs, postMsg, roomType, fetchCrossRoomContext, runCoaComparison]);
 
   // Export brief — streaming response (same pattern as callAgent)
   const exportBrief = useCallback(async (type) => {
@@ -698,12 +802,19 @@ export default function WarRoom() {
                 <span style={{ flex: 1 }}>{step.title}</span>
               </button>
             ))}
-            <button style={{ ...S.btn("#D4A843", isRunning), width: "100%", marginTop: 8, padding: 8 }} disabled={isRunning}
-              onClick={() => runStep(completedSteps.size === 0 ? 0 : Math.min(completedSteps.size, MDMP_STEPS.length - 1))}>
-              {isRunning ? <><Spinner /> RUNNING...</> : completedSteps.size === 0 ? "▶ RUN STEP 1" : completedSteps.size >= MDMP_STEPS.length ? "✓ COMPLETE" : `▶ RUN STEP ${completedSteps.size + 1}`}
-            </button>
-            {completedSteps.size > 0 && completedSteps.size < MDMP_STEPS.length && (
-              <button style={{ ...S.btn("#566A80", isRunning), width: "100%", marginTop: 4, padding: 6, fontSize: 9 }} disabled={isRunning} onClick={() => runStep(currentStep >= 0 ? currentStep : 0)}>↺ RERUN STEP</button>
+            {isRunning ? (
+              <button style={{ ...S.btn("#E05555", false), width: "100%", marginTop: 8, padding: 8, fontWeight: 700 }}
+                onClick={() => { stopRef.current = true; setIsRunning(false); }}>
+                ⛔ STOP EXECUTION
+              </button>
+            ) : (
+              <button style={{ ...S.btn("#D4A843", false), width: "100%", marginTop: 8, padding: 8 }}
+                onClick={() => runStep(completedSteps.size === 0 ? 0 : Math.min(completedSteps.size, MDMP_STEPS.length - 1))}>
+                {completedSteps.size === 0 ? "▶ RUN STEP 1" : completedSteps.size >= MDMP_STEPS.length ? "✓ COMPLETE" : `▶ RUN STEP ${completedSteps.size + 1}`}
+              </button>
+            )}
+            {!isRunning && completedSteps.size > 0 && completedSteps.size < MDMP_STEPS.length && (
+              <button style={{ ...S.btn("#566A80", false), width: "100%", marginTop: 4, padding: 6, fontSize: 9 }} onClick={() => runStep(currentStep >= 0 ? currentStep : 0)}>↺ RERUN STEP</button>
             )}
           </div>
 
@@ -833,6 +944,23 @@ export default function WarRoom() {
                   );
                 });
               })()}
+
+              {/* COA Comparison — OVERALL room only */}
+              {roomType === "OVERALL" && (
+                <>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#D4A843", textTransform: "uppercase", marginTop: 8, marginBottom: 4 }}>COA COMPARISON</div>
+                  <button
+                    style={{ ...S.btn("#D4A843", isRunning), width: "100%", padding: 8, fontSize: 10, marginBottom: 4, fontWeight: 700, letterSpacing: 1, border: "1px solid #D4A843" }}
+                    disabled={isRunning}
+                    onClick={runCoaComparison}
+                  >
+                    {isRunning ? <><Spinner /> RUNNING...</> : "⚖ RUN COA COMPARISON"}
+                  </button>
+                  <div style={{ fontSize: 8, color: "#566A80", lineHeight: 1.3, marginBottom: 6 }}>
+                    Fuses wargaming data from all rooms. Scores COA 1 vs COA 2 against CDR criteria: WGX Speed (w:2), Tempo (w:1), Force Attrition (w:3), Concentration (w:3).
+                  </div>
+                </>
+              )}
 
               {/* Export Brief buttons */}
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: "#566A80", textTransform: "uppercase", marginTop: 8, marginBottom: 4 }}>EXPORT BRIEF</div>
