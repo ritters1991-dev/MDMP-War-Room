@@ -337,17 +337,19 @@ export default function WarRoom() {
   }, [roomId]);
 
   // Cross-room context for OVERALL room — reads recent activity from COA1, COA2, REDCELL
-  // Cross-room awareness: each room pulls intel from related rooms
-  // OVERALL → sees COA1, COA2, REDCELL (full picture for CDR)
-  // COA1    → sees REDCELL (enemy actions inform blue planning)
-  // COA2    → sees REDCELL (enemy actions inform blue planning)
-  // REDCELL → sees COA1, COA2 (enemy reacts to blue actions)
+  // Cross-room awareness: isolated data flows prevent SITTEMP contamination
+  // OVERALL  → sees all 4 rooms (full picture for CDR)
+  // COA1     → sees REDCELL1 only (COA 1 enemy actions)
+  // COA2     → sees REDCELL2 only (COA 2 enemy actions)
+  // REDCELL1 → sees COA1 only (reacts to COA 1 blue actions)
+  // REDCELL2 → sees COA2 only (reacts to COA 2 blue actions)
   const fetchCrossRoomContext = useCallback(async () => {
     const crossRoomMap = {
-      OVERALL: ["COA1", "COA2", "REDCELL"],
-      COA1: ["REDCELL"],
-      COA2: ["REDCELL"],
-      REDCELL: ["COA1", "COA2"],
+      OVERALL: ["COA1", "COA2", "REDCELL1", "REDCELL2"],
+      COA1: ["REDCELL1"],
+      COA2: ["REDCELL2"],
+      REDCELL1: ["COA1"],
+      REDCELL2: ["COA2"],
     };
     const otherRooms = crossRoomMap[roomType];
     if (!otherRooms) return "";
