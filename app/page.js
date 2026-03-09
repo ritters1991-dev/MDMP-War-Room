@@ -780,15 +780,20 @@ export default function WarRoom() {
                 {aStaff && <span style={{ fontSize: 11, color: "#566A80", marginLeft: 12 }}>{aStaff.desc}</span>}
               </div>
               <div style={S.ma}>
-                {chMsgs.map((m) => (
-                  <div key={m.id} style={S.msg(m.isHuman, m.senderColor)}>
-                    <div style={S.av(m.senderColor)}>{m.isHuman ? "👤" : m.sender.slice(0, 2).toUpperCase()}</div>
+                {chMsgs.map((m, idx) => {
+                  const displayName = m.sender || m.senderName || "System";
+                  const displayColor = m.senderColor || (m.role === "user" ? "#D4A843" : "#7A8A9E");
+                  const isHuman = m.isHuman || m.role === "user";
+                  return (
+                  <div key={m.id || `msg-${idx}`} style={S.msg(isHuman, displayColor)}>
+                    <div style={S.av(displayColor)}>{isHuman ? "👤" : displayName.slice(0, 2).toUpperCase()}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div><span style={{ fontSize: 11, fontWeight: 700, color: m.senderColor }}>{m.sender}</span><span style={{ fontSize: 10, color: "#566A80", marginLeft: 8 }}>{m.time}</span></div>
+                      <div><span style={{ fontSize: 11, fontWeight: 700, color: displayColor }}>{displayName}</span><span style={{ fontSize: 10, color: "#566A80", marginLeft: 8 }}>{m.time}</span></div>
                       <div style={S.mt}>{m.text}</div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 {isRunning && activeChannel === "cop" && <div style={{ padding: "8px 12px", color: "#D4A843", fontSize: 12, animation: "pulse 1.5s infinite" }}><Spinner /> 25 ID staff working...</div>}
                 <div ref={messagesEndRef} />
               </div>
