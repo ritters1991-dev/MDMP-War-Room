@@ -36,7 +36,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: model || "claude-sonnet-4-20250514",
-        max_tokens: maxTokens || 4096,
+        max_tokens: maxTokens || 16000,
         stream: true, // STREAMING — prevents Vercel Edge 25s timeout
         system: safeSystem,
         messages: [{ role: "user", content: safeUser }],

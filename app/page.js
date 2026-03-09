@@ -524,13 +524,19 @@ export default function WarRoom() {
     postMsg("cop", "SYSTEM", "#D4A843", `═══════════════════════════════════════\n  25 ID STAFF: STEP ${step.num} — ${step.title.toUpperCase()}\n═══════════════════════════════════════\n\nLead: ${step.lead.map((l) => STAFF[l]?.short).join(", ")}\nSupporting: ${step.support.map((s) => STAFF[s]?.short).join(", ")}\nOutputs: ${step.outputs.join(", ")}\n\nAll sections working...`, true);
     const allAgents = [...step.lead, ...step.support], results = {};
     for (const a of allAgents) postMsg(a, STAFF[a].title, STAFF[a].color, `Roger. Working Step ${step.num}...`, true);
-    // Run agents ONE AT A TIME — 1500 token cap + 2s gaps to stay within Tier 1 output token limit (8K/min)
+    // Run agents ONE AT A TIME — token cap + 2s gaps to stay within Tier 1 output token limit
+    // Step 7 (Orders Production) gets 8000 tokens for full annexes; other steps get 1500
+    const isOrdersStep = step.id === "orders_production";
+    const stepMaxTokens = isOrdersStep ? 8000 : 1500;
+    const stepInstruction = isOrdersStep
+      ? `Produce your COMPLETE annex/appendix for the OPORD. Use full doctrinal format with all required sections. Be thorough — do not abbreviate or summarize.`
+      : `Be concise — focus on actionable items, under 800 words.`;
     for (const a of allAgents) {
       if (stopRef.current) { postMsg("cop", "SYSTEM", "#E05555", "⛔ Step execution HALTED by operator.", true); break; }
       const agent = STAFF[a];
       // For Step 5, append criteria override to system prompt so model can't default to generic FM 5-0 criteria
       const sysOverride = criteriaOverride ? buildSystemPrompt(agent, null, roomType) + criteriaOverride : undefined;
-      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. Be concise — focus on actionable items, under 800 words.`, { maxTokens: 1500, roomType, systemOverride: sysOverride });
+      const result = await callAgent(a, `${prompt}\n\nYou are the ${agent.title}. Provide YOUR specific outputs for this step. ${stepInstruction}`, { maxTokens: stepMaxTokens, roomType, systemOverride: sysOverride });
       if (stopRef.current) { postMsg("cop", "SYSTEM", "#E05555", "⛔ Step execution HALTED by operator.", true); break; }
       results[a] = result;
       postMsg(a, agent.title, agent.color, result, true);
@@ -548,7 +554,9 @@ export default function WarRoom() {
       .join("\n\n");
     let xo;
     try {
-      xo = await callAgent("xo", `XO: Synthesize Step ${step.num}.\n\n${xoInputs}\n\nBLUF, key issues, gaps, risks. Under 400 words.`, { maxTokens: 800, retries: 1, roomType });
+      const xoMaxTokens = isOrdersStep ? 4000 : 800;
+      const xoInstruction = isOrdersStep ? `Compile the base OPORD body (Situation, Mission, Execution, Sustainment, Command & Signal) and reference each staff annex.` : `BLUF, key issues, gaps, risks. Under 400 words.`;
+      xo = await callAgent("xo", `XO: Synthesize Step ${step.num}.\n\n${xoInputs}\n\n${xoInstruction}`, { maxTokens: xoMaxTokens, retries: 1, roomType });
     } catch (e) { xo = null; }
     // Graceful fallback if XO fails (timeout, rate limit, etc.)
     if (xo && !xo.startsWith("⚠")) {
@@ -586,10 +594,10 @@ export default function WarRoom() {
       const agent = STAFF[activeChannel];
       postMsg(activeChannel, agent.title, agent.color, "Processing...", true);
       const recent = (messages[activeChannel] || []).slice(-20).map((m) => `${m.sender}: ${m.text}`).join("\n\n");
-      const resp = await callAgent(activeChannel, `CONVERSATION:\n${recent}\n\nDOCS:\n${getDocContext()}\n\nPREV OUTPUTS:\n${getPrevOutputs()}\n\n${sn} says: "${text}"\n\nRespond as ${agent.title}. If this is a request for revision, clearly mark changes as "REVISED per guidance." Be specific, use doctrine.`, { roomType, crossRoomContext: crossCtx });
+      const resp = await callAgent(activeChannel, `CONVERSATION:\n${recent}\n\nDOCS:\n${getDocContext()}\n\nPREV OUTPUTS:\n${getPrevOutputs()}\n\n${sn} says: "${text}"\n\nRespond as ${agent.title}. If this is a request for revision, clearly mark changes as "REVISED per guidance." Be specific, use doctrine.`, { maxTokens: 16000, roomType, crossRoomContext: crossCtx });
       postMsg(activeChannel, agent.title, agent.color, resp, true);
     } else if (activeChannel === "cop") {
-      const resp = await callAgent("xo", `CDR (${sn}) posted to COP: "${text}"\n\nRecent COP:\n${(messages.cop || []).slice(-10).map((m) => `${m.sender}: ${m.text.slice(0, 200)}`).join("\n")}\n\nDocs:\n${getDocContext()}\n\nPrev:\n${getPrevOutputs()}\n\nAs 25 ID XO, respond.`, { roomType, crossRoomContext: crossCtx });
+      const resp = await callAgent("xo", `CDR (${sn}) posted to COP: "${text}"\n\nRecent COP:\n${(messages.cop || []).slice(-10).map((m) => `${m.sender}: ${m.text.slice(0, 200)}`).join("\n")}\n\nDocs:\n${getDocContext()}\n\nPrev:\n${getPrevOutputs()}\n\nAs 25 ID XO, respond.`, { maxTokens: 16000, roomType, crossRoomContext: crossCtx });
       postMsg("cop", "25 ID XO", "#D4A843", resp, true);
     } else if (activeChannel === "cdr") {
       postMsg("cdr", "SYSTEM", "#FFD700", "CDR guidance recorded. Staff notified.", true);
