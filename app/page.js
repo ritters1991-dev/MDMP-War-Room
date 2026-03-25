@@ -284,7 +284,10 @@ export default function WarRoom() {
   const [currentStep, setCurrentStep] = useState(-1);
   const [stepOutputs, setStepOutputs] = useState({});
   const [isRunning, setIsRunning] = useState(false);
-  const [completedSteps, setCompletedSteps] = useState(new Set());
+  // MDMP is complete — force all 7 steps done for execution/sim support mode
+  const [completedSteps, setCompletedSteps] = useState(
+    new Set([0, 1, 2, 3, 4, 5, 6]),
+  );
   const [participants, setParticipants] = useState([]);
   const [sessionId] = useState(() => uid());
 
@@ -551,7 +554,8 @@ export default function WarRoom() {
         if (v) {
           if (v.currentStep !== undefined) setCurrentStep(v.currentStep);
           if (v.isRunning !== undefined) setIsRunning(v.isRunning);
-          if (v.completedSteps) setCompletedSteps(new Set(v.completedSteps));
+          // MDMP is complete — always force all 7 steps done regardless of Firebase state
+          setCompletedSteps(new Set([0, 1, 2, 3, 4, 5, 6]));
           if (v.stepOutputs) setStepOutputs(v.stepOutputs);
         }
       });
@@ -2079,74 +2083,21 @@ export default function WarRoom() {
         {/* RIGHT PANEL */}
         <div style={S.rp}>
           <div style={S.rps}>
-            <div style={S.rpt}>MDMP PROGRESS</div>
-            {MDMP_STEPS.map((step, i) => (
-              <button
-                key={step.id}
-                style={S.stb(currentStep === i, completedSteps.has(i))}
-                onClick={() => !isRunning && setCurrentStep(i)}
-              >
-                <span style={S.stn(currentStep === i, completedSteps.has(i))}>
-                  {completedSteps.has(i) ? "✓" : step.num}
-                </span>
-                <span style={{ flex: 1 }}>{step.title}</span>
-              </button>
-            ))}
-            {isRunning ? (
-              <button
-                style={{
-                  ...S.btn("#E05555", false),
-                  width: "100%",
-                  marginTop: 8,
-                  padding: 8,
-                  fontWeight: 700,
-                }}
-                onClick={() => {
-                  stopRef.current = true;
-                  setIsRunning(false);
-                }}
-              >
-                ⛔ STOP EXECUTION
-              </button>
-            ) : (
-              <button
-                style={{
-                  ...S.btn("#D4A843", false),
-                  width: "100%",
-                  marginTop: 8,
-                  padding: 8,
-                }}
-                onClick={() =>
-                  runStep(
-                    completedSteps.size === 0
-                      ? 0
-                      : Math.min(completedSteps.size, MDMP_STEPS.length - 1),
-                  )
-                }
-              >
-                {completedSteps.size === 0
-                  ? "▶ RUN STEP 1"
-                  : completedSteps.size >= MDMP_STEPS.length
-                    ? "✓ COMPLETE"
-                    : `▶ RUN STEP ${completedSteps.size + 1}`}
-              </button>
-            )}
-            {!isRunning &&
-              completedSteps.size > 0 &&
-              completedSteps.size < MDMP_STEPS.length && (
-                <button
-                  style={{
-                    ...S.btn("#566A80", false),
-                    width: "100%",
-                    marginTop: 4,
-                    padding: 6,
-                    fontSize: 9,
-                  }}
-                  onClick={() => runStep(currentStep >= 0 ? currentStep : 0)}
-                >
-                  ↺ RERUN STEP
-                </button>
-              )}
+            <div style={S.rpt}>MDMP STATUS</div>
+            <div
+              style={{
+                padding: "8px 6px",
+                fontSize: 10,
+                color: "#2CC5A0",
+                fontWeight: 700,
+                letterSpacing: 1,
+                textAlign: "center",
+                background: "#2CC5A010",
+                borderRadius: 4,
+              }}
+            >
+              ✓ MDMP COMPLETE — EXECUTION MODE
+            </div>
           </div>
 
           {/* COLLAPSIBLE FILE TREES */}
